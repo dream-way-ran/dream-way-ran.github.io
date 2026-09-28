@@ -1,0 +1,2545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>西安城市服务地图 · 便民服务</title>
+
+  <!-- Vue 3（生产构建，CDN；如需完全离线可下载后本地引用） -->
+  <script src="./assets/vendor/vue.global.prod.js"></script>
+
+  <!-- 全局配置（GeoScene 参数，西安专题，留空待填） -->
+  <script src="./config.js"></script>
+  <!-- 独立地图命令模块（ArcGIS 4.29 本地离线包 + 在线 CDN 自动回退） -->
+  <script src="./mapService.js"></script>
+
+  <style>
+    :root {
+      --bg: #eef4fb;
+      --bg-side: #f6faff;
+      --bg-panel: #ffffff;
+      --bg-panel-head: linear-gradient(90deg, #f4f9ff, #e8f2fd);
+      --border: #dbe9f7;
+      --text: #223a55;
+      --text-sub: #64809f;
+      --accent: #3f8efc;
+      --accent-2: #2f79e6;
+      --ok: #21a674;
+      --warn: #e39b2f;
+      --danger: #e25764;
+      --info: #39a3f2;
+      --shadow-card: 0 1px 3px rgba(41,90,150,.08), 0 6px 18px rgba(41,90,150,.06);
+      --shadow-lg: 0 10px 30px rgba(24,70,120,.14);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+      background:
+        radial-gradient(1100px 520px at 88% -8%, rgba(63,142,252,.18), transparent 60%),
+        radial-gradient(900px 460px at -8% 112%, rgba(38,182,150,.12), transparent 55%),
+        linear-gradient(135deg, #f4f9ff, #eaf3fc);
+      color: var(--text); font-size: 14px;
+    }
+    #app { height: 100vh; display: flex; flex-direction: column; }
+
+    /* ============ 顶部导航栏 ============ */
+    .topbar {
+      height: 58px; background: linear-gradient(90deg, #f4f9ff, #e4effb 55%, #dcecfa);
+      color: #1f4d8a; display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
+      box-shadow: 0 3px 14px rgba(33,70,120,.12); position: relative; z-index: 6;
+    }
+    .topbar .logo { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+    .topbar .logo::before { content: "🛰️"; margin-right: 8px; }
+    .topbar .sub { font-size: 12px; color: #6282a5; margin-left: 4px; }
+    .topbar .spacer { flex: 1; }
+    .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; white-space: nowrap; }
+    .badge.ok { background: #e5f8ef; color: #147a52; border: 1px solid #68d6a5; }
+    .badge.warn { background: #fff5e5; color: #a3690f; border: 1px solid #f3c56f; }
+    .hint {
+      font-size: 12px; color: #b06d12; white-space: nowrap; display: flex; align-items: center; gap: 4px;
+    }
+    .btn {
+      border: none; cursor: pointer; border-radius: 8px; padding: 8px 14px;
+      font-size: 13px; transition: .18s; font-family: inherit; font-weight: 500;
+    }
+    .btn-primary { background: linear-gradient(90deg, #66a9fb, #3f8efc); color: #fff; box-shadow: 0 2px 8px rgba(63,142,252,.28); }
+    .btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(63,142,252,.34); }
+    .btn-primary:disabled { background: #b7c7dd; box-shadow: none; cursor: not-allowed; opacity: .7; transform: none; }
+    .btn-ghost { background: #fff; color: #2b5d9e; border: 1px solid #c9dff5; }
+    .btn-ghost:hover { background: #eef6ff; border-color: #9cc4f5; }
+    .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
+    .topbar .btn-ghost { background: transparent; color: #2b5d9e; border-color: #a7c7e8; }
+    .topbar .btn-ghost:hover { background: rgba(63,142,252,.10); }
+
+    /* ============ 主体：左菜单 + 中地图 + 右面板 ============ */
+    .main { flex: 1; display: flex; min-height: 0; }
+
+    /* 左侧模块菜单栏 */
+    .sidebar {
+      width: 190px; background: linear-gradient(180deg, #f7fbff, #eaf3fd 120%);
+      color: #395473; display: flex; flex-direction: column; flex-shrink: 0;
+      border-right: 1px solid rgba(33,70,120,.08);
+    }
+    .sidebar .menu { flex: 1; padding: 10px 0; }
+    .menu-item {
+      display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+      cursor: pointer; color: #5b7696; border-left: 3px solid transparent;
+      transition: .15s; font-size: 14px;
+    }
+    .menu-item:hover { background: rgba(63,142,252,.08); color: #1d5ba8; }
+    .menu-item.active {
+      background: linear-gradient(90deg, rgba(63,142,252,.16), rgba(63,142,252,.02));
+      color: #1d5ba8; border-left-color: var(--accent); font-weight: 600;
+    }
+    .menu-item .ico { font-size: 16px; width: 22px; text-align: center; }
+    .sidebar .foot {
+      padding: 14px 16px; font-size: 12px; color: #6f89a7;
+      border-top: 1px solid rgba(33,70,120,.08); line-height: 1.6;
+    }
+    .sidebar .foot .guide { color: #c17b16; margin-top: 6px; line-height: 1.5; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .dot.ok { background: var(--ok); }
+    .dot.warn { background: var(--warn); }
+
+    /* 中间地图主视图 */
+    .map-wrap { flex: 1; position: relative; min-width: 0; background: linear-gradient(180deg, #e7edf7, #d6e1f0); }
+    #map { position: absolute; inset: 0; background: transparent; }
+    .map-tip {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      text-align: center; color: #6b7a90; pointer-events: none; z-index: 1; max-width: 80%;
+    }
+    .map-tip .big { font-size: 42px; }
+    .map-tip p { margin-top: 8px; }
+    .map-error {
+      position: absolute; left: 0; right: 0; top: 0; z-index: 2;
+      background: #fdeaea; border-bottom: 1px solid #f0b9ba; color: #c0392b;
+      padding: 12px 16px; font-size: 13px; display: flex; align-items: center; gap: 8px;
+    }
+    .analysis-count {
+      position: absolute; top: 14px; right: 14px; z-index: 3;
+      min-width: 178px; padding: 11px 14px;
+      background: rgba(255,255,255,.92);
+      border: 1px solid #cfe4f8; border-radius: 14px;
+      box-shadow: 0 4px 16px rgba(33,70,120,.12);
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+    .analysis-count .count-main {
+      display: flex; align-items: baseline; gap: 8px;
+      font-size: 12px; color: var(--text-sub);
+    }
+    .analysis-count .count-main b {
+      font-size: 27px; line-height: 1.1; color: var(--ok);
+      font-family: var(--font-data, "DIN Alternate", sans-serif);
+    }
+    .analysis-count .count-sub {
+      margin-top: 5px; font-size: 11px; color: #6f89a7; line-height: 1.5;
+    }
+
+    /* 右侧信息面板 */
+    .panel {
+      width: 430px; background: var(--bg-panel); display: flex;
+      flex-direction: column; overflow: hidden; flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      box-shadow: -4px 0 18px rgba(15,42,84,.07);
+    }
+    .panel-head {
+      padding: 14px 16px; background: var(--bg-panel-head);
+      border-bottom: 1px solid var(--border); font-weight: 600; font-size: 15px;
+      display: flex; align-items: center; justify-content: space-between;
+      color: #13325f; letter-spacing: .3px;
+    }
+    .panel-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+    /* 警告横幅 */
+    .warning-bar {
+      display: flex; align-items: center; gap: 10px;
+      background: linear-gradient(90deg, #fff8ec, #fffdf6); border: 1px solid #ffe0a3; color: #9a6a00;
+      padding: 11px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 14px;
+    }
+    .warning-bar .close { margin-left: auto; cursor: pointer; color: #ad6800; font-weight: 700; }
+
+    /* ============ 通用组件 ============ */
+    .card {
+      background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      margin-bottom: 12px; box-shadow: var(--shadow-card); transition: box-shadow .2s, border-color .2s;
+    }
+    .card:hover { border-color: #cbd9ec; box-shadow: 0 2px 6px rgba(15,42,84,.06), 0 10px 26px rgba(15,42,84,.09); }
+    .card h4 {
+      font-size: 13px; color: #33475f; margin-bottom: 12px; font-weight: 600; letter-spacing: .3px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card h4::before {
+      content: ""; width: 4px; height: 14px; border-radius: 2px; flex-shrink: 0;
+      background: linear-gradient(180deg, var(--accent), #7aa8f5);
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .kpi {
+      background: linear-gradient(180deg, #ffffff, #f6f9fd); border: 1px solid var(--border); border-radius: 12px;
+      padding: 15px 10px 13px; text-align: center; box-shadow: var(--shadow-card); position: relative; overflow: hidden;
+    }
+    .kpi::after { content: ""; position: absolute; left: 10%; right: 10%; top: 0; height: 3px; border-radius: 0 0 4px 4px; background: linear-gradient(90deg, transparent, rgba(63,142,252,.5), transparent); }
+    .kpi .num { font-size: 24px; font-weight: 700; color: var(--accent); line-height: 1.2; }
+    .kpi .lbl { font-size: 12px; color: var(--text-sub); margin-top: 5px; line-height: 1.45; }
+
+    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    thead th {
+      background: #f4f8fd; color: #5b6b82; font-weight: 600; font-size: 12px; white-space: nowrap;
+      padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left;
+    }
+    thead th:first-child { border-radius: 8px 0 0 0; }
+    thead th:last-child { border-radius: 0 8px 0 0; }
+    tbody td { padding: 9px 10px; border-bottom: 1px solid #eef2f8; vertical-align: middle; text-align: left; }
+    tbody tr:nth-child(even) { background: #fafcff; }
+    tbody tr:hover { background: #eef5ff; }
+    tbody tr:last-child td { border-bottom: none; }
+    .tag { padding: 3px 10px; border-radius: 20px; font-size: 11px; white-space: nowrap; font-weight: 500; display: inline-block; }
+    .tag.ok { background: #e8f7ef; color: #0e8a4e; }
+    .tag.warn { background: #fff4e0; color: #b26a00; }
+    .tag.err { background: #fdeaea; color: #d93a41; }
+    .tag.info { background: #e8f3ff; color: #1267cf; }
+    .muted { color: var(--text-sub); font-size: 12px; }
+    .link { color: var(--accent); cursor: pointer; text-decoration: none; font-size: 13px; }
+    .link:hover { text-decoration: underline; }
+
+    .form-row { margin-bottom: 13px; }
+    .form-row label { display: block; font-size: 12px; color: #5b6b82; margin-bottom: 5px; font-weight: 500; }
+    .form-row input, .form-row select, .form-row textarea {
+      width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 13px; font-family: inherit; background: #fff; color: var(--text); transition: .15s;
+    }
+    .form-row input:focus, .form-row select:focus, .form-row textarea:focus {
+      outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47,111,237,.12);
+    }
+    .form-row input::placeholder, .form-row textarea::placeholder { color: #a0afc2; }
+
+    .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bar-row .name { width: 80px; font-size: 12px; color: var(--text-sub); white-space: nowrap; }
+    .bar-track { flex: 1; height: 12px; background: #edf2f8; border-radius: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #8ec3f9, #3f8efc); transition: width .5s ease; }
+    .bar-row .val { width: 46px; text-align: right; font-size: 12px; font-weight: 600; color: #33475f; }
+
+    .layer-item { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-bottom: 1px solid #f0f3f7; border-radius: 8px; transition: background .15s; }
+    .layer-item:hover { background: #f4f8fe; }
+    .layer-item:last-child { border-bottom: none; }
+    .layer-item input { cursor: pointer; accent-color: var(--accent); }
+
+    /* 行政区 chip */
+    .district-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .chip {
+      padding: 6px 13px; border-radius: 18px; font-size: 12px; cursor: pointer; user-select: none;
+      background: #f2f7fd; color: #3b5a85; border: 1px solid #dce8f7; transition: .15s;
+    }
+    .chip:hover { background: #e2edfb; border-color: #9cc4f5; color: #1b4f9e; }
+    .chip.active { background: linear-gradient(90deg, #66a9fb, #3f8efc); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(63,142,252,.28); }
+    .chip.active:hover { background: linear-gradient(90deg, #66a9fb, #3f8efc); color: #fff; }
+    .chip.disabled { opacity: .45; cursor: not-allowed; }
+
+    /* 公园服务 · 选址分析筛选行 */
+    .filter-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; margin-bottom: 9px;
+      background: #fbfdff; transition: border-color .15s, background .15s;
+    }
+    .filter-row:hover { border-color: #c3d6ee; background: #f7faff; }
+    .filter-label {
+      display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600;
+      color: #33475f; cursor: pointer; flex-shrink: 0;
+    }
+    .filter-label input { cursor: pointer; accent-color: var(--accent); width: 15px; height: 15px; }
+    .filter-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .filter-value input[type="number"] {
+      width: 92px; height: 34px; padding: 4px 10px; text-align: center;
+      border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit;
+    }
+    .filter-value select {
+      height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 13px; font-family: inherit; background: #fff; color: var(--text);
+    }
+    .filter-value select.unit-select { width: 74px; }
+    .filter-value input:focus, .filter-value select:focus {
+      outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47,111,237,.12);
+    }
+    .range-sep { color: #94a3b8; font-weight: 600; }
+    .unit-label { font-size: 12px; color: #64748b; }
+    .filter-row.off { opacity: .55; background: #fafbfd; border-color: #e8eef6; }
+    .filter-row.off .filter-label { color: #94a3b8; }
+    .filter-value { flex-wrap: wrap; justify-content: flex-end; }
+    .filter-value.area-value input[type="number"] { width: 76px; }
+    .filter-value.area-value .tol-input { width: 54px; }
+    .seg-sm { display: inline-flex; background: #eef3fa; border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; flex-shrink: 0; }
+    .seg-sm-btn {
+      border: none; background: transparent; cursor: pointer; padding: 5px 9px;
+      border-radius: 6px; font-size: 12px; color: #5b6b82; font-family: inherit; transition: .15s;
+    }
+    .seg-sm-btn.active { background: #fff; color: #1d5ba8; font-weight: 600; box-shadow: 0 1px 4px rgba(33,70,120,.15); }
+    .seg-sm-btn:disabled { cursor: not-allowed; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+    .stats-legend { background: #f6f9fd; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 12px; color: #5b6b82; line-height: 1.85; }
+    .stats-legend div { margin-bottom: 4px; }
+    .stats-legend div:last-child { margin-bottom: 0; }
+    .stats-legend b { color: #33475f; }
+    .stats-legend code { background: #e8f0fa; padding: 1px 5px; border-radius: 4px; font-size: 11px; color: #1267cf; }
+    .filter-block { margin: 14px 0 12px; }
+    .filter-block-label { font-size: 12px; color: #5b6b82; font-weight: 500; margin-bottom: 7px; }
+    .seg { display: flex; background: #f1f5fa; border: 1px solid var(--border); border-radius: 10px; padding: 4px; gap: 4px; }
+    .seg label { flex: 1; text-align: center; cursor: pointer; border-radius: 8px; padding: 8px 4px; font-size: 13px; color: #5b6b82; transition: .15s; }
+    .seg label input { display: none; }
+    .seg label.active { background: linear-gradient(90deg, #66a9fb, #3f8efc); color: #fff; box-shadow: 0 2px 8px rgba(63,142,252,.28); font-weight: 500; }
+    .seg label:hover:not(.active) { background: #e6f1ff; color: #1d5ba8; }
+
+    /* 数字输入框上下箭头放大 */
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      width: 26px; height: 30px; opacity: 1; cursor: pointer; margin: 0; border-radius: 4px;
+    }
+    input[type="number"]::-webkit-inner-spin-button:hover { background: rgba(47,111,237,.18); }
+    input[type="number"]::-webkit-inner-spin-button:active { background: rgba(47,111,237,.30); }
+    .form-row input[type="number"] { min-height: 38px; }
+
+    /* 公园服务子页签 */
+    .park-tabs {
+      display: flex; gap: 6px; margin-bottom: 14px;
+      background: #f1f5fa; border: 1px solid var(--border); border-radius: 12px; padding: 5px;
+    }
+    .park-tabs .chip { flex: 1; text-align: center; border: none; background: transparent; color: #5b6b82; }
+    .park-tabs .chip:hover { background: #e2edfb; color: #1b4f9e; }
+    .park-tabs .chip.active { background: linear-gradient(90deg, #66a9fb, #3f8efc); color: #fff; box-shadow: 0 2px 8px rgba(63,142,252,.28); }
+    .park-tabs .chip.active:hover { background: linear-gradient(90deg, #66a9fb, #3f8efc); color: #fff; }
+    .panel-head-ico { margin-right: 7px; }
+
+    .toast {
+      position: fixed; top: 66px; right: 16px; z-index: 999; display: flex; flex-direction: column; gap: 8px;
+    }
+    .toast-item {
+      background: rgba(22,32,48,.95); color: #fff; padding: 11px 16px; border-radius: 10px; font-size: 13px;
+      box-shadow: 0 8px 24px rgba(8,20,45,.35); max-width: 360px; animation: slidein .2s ease;
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .toast-item.warn { border-left: 4px solid var(--warn); }
+    .toast-item.err { border-left: 4px solid var(--danger); }
+    .toast-item.ok { border-left: 4px solid var(--ok); }
+    @keyframes slidein { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    .empty { text-align: center; color: #9aa8bb; padding: 28px 0; font-size: 13px; }
+    .panel-body { flex: 1; overflow-y: auto; padding: 16px 16px 22px; scrollbar-width: thin; scrollbar-color: #c6d4e6 transparent; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #c7d4e6; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a9bdd8; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    /* ============ 登录 / 注册 / 忘记密码 弹层 ============ */
+    /* 全屏登录/注册门禁：覆盖整个页面，登录成功后才显示地图服务 */
+    .auth-mask {
+      position: fixed; inset: 0; z-index: 1000;
+      background:
+        radial-gradient(1100px 560px at 82% -12%, rgba(63,142,252,.22), transparent 60%),
+        radial-gradient(900px 460px at -8% 112%, rgba(38,182,150,.14), transparent 55%),
+        linear-gradient(135deg, rgba(244,249,255,.62), rgba(226,239,253,.78));
+      display: flex; align-items: center; justify-content: center;
+      overflow-y: auto; padding: 24px;
+    }
+    .auth-mask::before {
+      content: "";
+      position: absolute; inset: 0;
+      background-color: #d9e9f7;
+      background-image:
+        url("https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=205&y=102&z=8");
+      background-position: center;
+      background-size: cover;
+      background-repeat: no-repeat;
+      filter: blur(1px) saturate(.85) brightness(1.05);
+      z-index: 0;
+      pointer-events: none;
+    }
+    .auth-card {
+      width: 420px; max-width: 100%; background: #fff;
+      position: relative; z-index: 2;
+      border-radius: 20px; box-shadow: 0 30px 80px rgba(24,70,120,.22);
+      overflow: hidden; animation: authIn .3s ease;
+    }
+    @keyframes authIn { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .auth-head {
+      padding: 22px 24px 18px;
+      background:
+        radial-gradient(600px 200px at 85% -20%, rgba(102,169,251,.35), transparent 60%),
+        linear-gradient(120deg, #eaf3fd, #d9e9fa 60%, #cfe4fa);
+      color: #1f4d8a;
+    }
+    .auth-brand { display: flex; align-items: center; gap: 12px; }
+    .auth-logo { font-size: 34px; line-height: 1; filter: drop-shadow(0 2px 6px rgba(0,0,0,.3)); }
+    .auth-title { font-size: 19px; font-weight: 700; letter-spacing: 1px; }
+    .auth-sub { font-size: 12px; color: #64819f; margin-top: 3px; letter-spacing: .5px; }
+    .auth-tabs { display: flex; gap: 6px; padding: 14px 22px 0; }
+    .auth-tab {
+      border: none; background: transparent; color: #5b6b82; cursor: pointer;
+      padding: 8px 18px; font-size: 14px; border-radius: 9px; font-family: inherit; transition: .15s;
+    }
+    .auth-tab:hover { background: #e9f3ff; color: #1d5ba8; }
+    .auth-tab.active { background: #f8fbff; color: #1d5ba8; font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
+    .auth-body { padding: 18px 22px 16px; }
+    .auth-body .form-row { margin-bottom: 13px; }
+    .auth-body .form-row label { display: block; font-size: 12px; color: #5b6b82; margin-bottom: 5px; font-weight: 500; }
+    .auth-body input, .auth-body textarea {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px;
+      font-size: 14px; font-family: inherit; outline: none; transition: .15s; background: #fff; color: var(--text);
+    }
+    .auth-body input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47,111,237,.12); }
+    .auth-body input::placeholder { color: #a0afc2; }
+    .auth-btn {
+      width: 100%; border: none; cursor: pointer; border-radius: 9px; padding: 11px;
+      font-size: 14px; font-weight: 600; color: #fff; background: linear-gradient(90deg, #66a9fb, #3f8efc);
+      font-family: inherit; transition: .18s; box-shadow: 0 2px 8px rgba(63,142,252,.26);
+    }
+    .auth-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .auth-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+    .auth-error { color: var(--danger); font-size: 12px; margin: 8px 0; }
+    .auth-hint { color: var(--text-sub); font-size: 12px; margin-top: 12px; line-height: 1.7; background: #f5f8fb; border-radius: 8px; padding: 8px 10px; }
+    .auth-link { color: var(--accent); cursor: pointer; font-size: 13px; }
+    .auth-link:hover { text-decoration: underline; }
+    .auth-row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 0; }
+
+    /* 全屏登录页装饰背景 */
+    .auth-deco { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+    .auth-deco .deco-pin {
+      position: absolute; font-size: 36px; opacity: .16;
+      animation: floatY 6s ease-in-out infinite; filter: drop-shadow(0 4px 10px rgba(0,0,0,.3));
+    }
+    .auth-deco .deco-ring {
+      position: absolute; width: 240px; height: 240px; border-radius: 50%;
+      border: 2px solid rgba(31,77,138,.10);
+    }
+    @keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
+
+    /* 游客登录 */
+    .auth-foot { padding: 0 22px 22px; }
+    .auth-guest {
+      width: 100%; border: 1px dashed #b9cde8; background: #f8fbff; color: #3b5a85; cursor: pointer;
+      padding: 11px; border-radius: 9px; font-size: 13px; font-family: inherit; transition: .15s;
+    }
+    .auth-guest:hover { background: #eef5ff; border-color: #9cc4f5; color: #1b4f9e; }
+    .auth-tip { text-align: center; color: #9aa8bb; font-size: 11px; margin-top: 8px; }
+    .backend-status { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .backend-retry {
+      border: 1px solid #f0a020; background: #fff8ec; color: #b26a00; cursor: pointer;
+      padding: 3px 10px; border-radius: 8px; font-size: 12px; font-family: inherit; transition: .15s;
+    }
+    .backend-retry:hover { background: #fff0d6; border-color: #f0a020; }
+    .backend-status .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .backend-status.ok { color: #0e8a4e; } .backend-status.ok .dot { background: #17a05e; box-shadow: 0 0 6px rgba(23,160,94,.6); }
+    .backend-status.fail { color: #d93a41; } .backend-status.fail .dot { background: #e5484d; box-shadow: 0 0 6px rgba(229,72,77,.6); }
+    .backend-status.connecting { color: #b26a00; } .backend-status.connecting .dot { background: #f0a020; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+    /* 顶栏用户 */
+    .user-chip {
+      display: inline-flex; align-items: center; gap: 6px; background: #eaf3fd;
+      border: 1px solid #b9d4ef; border-radius: 20px; padding: 4px 12px;
+      font-size: 13px; color: #1f4d8a;
+    }
+    .topbar .btn-sm { padding: 5px 10px; font-size: 12px; }
+    /* 我的数据操作按钮 */
+    .own-actions { display: flex; gap: 6px; margin-top: 6px; }
+    .own-actions .btn { padding: 3px 9px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- ============ 顶部导航栏 ============ -->
+    <header class="topbar">
+      <div class="logo">西安城市服务地图<span class="sub">· 便民服务 · 实时路况 · 口袋公园</span></div>
+      <span class="spacer"></span>
+      <!-- 未配置引导提示 -->
+      <span v-if="configEmpty" class="hint">⚠ 请先在 config.js 配置底图（天地图/高德）或 GeoScene 服务</span>
+      <span class="badge" :class="configEmpty ? 'warn' : 'ok'">
+        {{ configEmpty ? '未配置地图' : mapBadgeText }}
+      </span>
+      <button v-if="mapReady" class="btn btn-ghost" title="使用浏览器定位并查看周边" @click="locateMe">📍 定位</button>
+      <template v-if="isLoggedIn">
+        <span class="user-chip">👤 {{ currentUser.nickname || currentUser.username }}<span style="margin-left:4px;font-size:11px;opacity:.85;">{{ roleText(currentUser.role) }}</span></span>
+        <button class="btn btn-ghost btn-sm" @click="openAuth('changepwd')">修改密码</button>
+        <button class="btn btn-ghost btn-sm" @click="logout">退出</button>
+      </template>
+      <template v-else-if="guestMode">
+        <span class="user-chip">👤 游客</span>
+        <button class="btn btn-ghost btn-sm" @click="openAuth('login')">登录</button>
+        <button class="btn btn-ghost btn-sm" @click="logout">退出</button>
+      </template>
+      <button class="btn btn-primary" :disabled="configEmpty || loading"
+              :title="configEmpty ? '请先在 config.js 配置底图或 mapServiceUrl' : '加载地图'"
+              @click="loadMap">
+        {{ loading ? '加载中…' : (mapReady ? '刷新地图' : '加载地图') }}
+      </button>
+    </header>
+
+    <div class="main">
+      <!-- ============ 左侧模块菜单栏 ============ -->
+      <aside class="sidebar">
+        <nav class="menu">
+          <div v-for="m in modules" :key="m.key" class="menu-item"
+               :class="{ active: activeModule === m.key }" @click="switchModule(m.key)">
+            <span class="ico">{{ m.ico }}</span>{{ m.name }}
+          </div>
+        </nav>
+        <div class="foot">
+          <div><span class="dot" :class="mapReady ? 'ok' : 'warn'"></span>{{ mapStatus }}</div>
+          <div style="margin-top:4px;">专题图层：{{ layers.length }} / {{ configLayers.length }}</div>
+          <div v-if="configEmpty" class="guide">⚠ 未配置地图服务，功能已禁用。<br>请编辑 config.js 后刷新。</div>
+        </div>
+      </aside>
+
+      <!-- ============ 中间地图主视图 ============ -->
+      <section class="map-wrap">
+        <div id="map">
+          <div v-if="arcgisState === 'error'" class="map-error">
+            <span>⚠️ ArcGIS API 未就绪：{{ arcgisError }}（请检查本地离线包路径或联网回退）</span>
+          </div>
+          <div v-else-if="!mapReady" class="map-tip">
+            <div class="big">🗺️</div>
+            <p>{{ configEmpty ? 'GeoScene 未配置，地图暂不可用（请在 config.js 填写服务参数）' : '点击「加载地图」初始化西安专题地图' }}</p>
+          </div>
+        </div>
+        <div v-if="analysisResult && analysisDrawn" class="analysis-count">
+          <div class="count-main">
+            <b>{{ analysisResult.stats.count_reachable }}</b>
+            <span>最终选址</span>
+          </div>
+          <div class="count-sub">
+            初始候选 {{ analysisResult.stats.count_init }} · 盲区 {{ analysisResult.stats.count_blind }}
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 右侧信息面板 ============ -->
+      <section class="panel">
+        <div class="panel-head">
+          <span><span class="panel-head-ico">{{ currentModule.ico }}</span>{{ currentModule.name }}</span>
+          <span class="muted">{{ currentModule.desc }}</span>
+        </div>
+        <div class="panel-body">
+          <!-- GeoScene 配置为空警告 -->
+          <div v-if="configEmpty" class="warning-bar">
+            <span>⚠️ 未配置底图或地图服务：请在 <b>config.js</b> 配置 <b>basemap</b>（天地图/高德）或 <b>mapServiceUrl</b> 后刷新页面。</span>
+            <span class="close" @click="dismissConfigWarn">✕</span>
+          </div>
+
+          <!-- ===== 1. 智慧交通（高德实时路况） ===== -->
+          <template v-if="activeModule === 'traffic'">
+            <div class="grid-2">
+              <div class="kpi"><div class="num">{{ traffic.todayFlow }}</div><div class="lbl">实时通行指数</div></div>
+              <div class="kpi"><div class="num">{{ traffic.avgSpeed }}</div><div class="lbl">平均车速(km/h)</div></div>
+              <div class="kpi"><div class="num" style="color:#e5484d;">{{ traffic.congested }}</div><div class="lbl">拥堵路段</div></div>
+              <div class="kpi"><div class="num">{{ traffic.roads.length }}</div><div class="lbl">监测路段</div></div>
+            </div>
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <h4 style="margin-bottom:0;">主要路段实时状态</h4>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <span v-if="trafficSource" class="tag" :class="trafficSource.includes('模拟') ? 'warn' : 'info'" style="font-size:11px;">{{ trafficSource }}</span>
+                  <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px;color:#1b7cf0;border-color:#1b7cf0;" :disabled="trafficLoading" @click="loadTrafficRealtime">🔄 {{ trafficLoading ? '刷新中…' : '刷新' }}</button>
+                </div>
+              </div>
+              <div v-if="trafficLoading" class="gov-skeleton skeleton-row" style="height:10px;"></div>
+              <table v-else>
+                <thead><tr><th>路段</th><th>方向</th><th>状态</th><th>车速</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="r in traffic.roads" :key="(r.name || '') + (r.lng || '')" style="cursor:pointer;" @click="focusTrafficRoad(r)">
+                    <td>{{ r.name }}</td>
+                    <td class="muted">{{ r.direction || '—' }}</td>
+                    <td><span class="tag" :class="roadClass(r.status)">{{ r.status }}</span></td>
+                    <td class="muted">{{ r.speed }} km/h</td>
+                    <td><span class="link">定位</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card">
+              <h4>出行方式占比</h4>
+              <div class="bar-row" v-for="t in traffic.modes" :key="t.name">
+                <span class="name">{{ t.name }}</span>
+                <div class="bar-track"><div class="bar-fill" :style="{ width: t.ratio + '%' }"></div></div>
+                <span class="val">{{ t.ratio }}%</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- ===== 2. 基础设施 ===== -->
+          <template v-if="activeModule === 'infra'">
+            <div class="grid-2">
+              <div class="kpi"><div class="num">{{ infra.total }}</div><div class="lbl">设施总数</div></div>
+              <div class="kpi"><div class="num">{{ infra.onlineRate }}%</div><div class="lbl">在线率</div></div>
+            </div>
+            <div class="card">
+              <h4>设施类型分布</h4>
+              <div class="bar-row" v-for="t in infra.types" :key="t.name">
+                <span class="name">{{ t.name }}</span>
+                <div class="bar-track"><div class="bar-fill" :style="{ width: t.ratio + '%', background: '#18a058' }"></div></div>
+                <span class="val">{{ t.count }}</span>
+              </div>
+            </div>
+            <div class="card">
+              <h4>重点设施（模拟）</h4>
+              <table>
+                <thead><tr><th>名称</th><th>类型</th><th>状态</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="f in infra.facilities" :key="f.name">
+                    <td>{{ f.name }}</td>
+                    <td class="muted">{{ f.type }}</td>
+                    <td><span class="tag" :class="statusClass(f.status)">{{ f.status }}</span></td>
+                    <td><a class="link" href="javascript:;" @click="locateByName(f.name)">定位</a></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card">
+              <h4>周边设施查询（高德POI）</h4>
+              <div class="form-row">
+                <label>设施类型</label>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                  <span v-for="t in facilityTypes" :key="t.key" class="chip" :class="{ active: facilityQuery.type === t.key }" @click="facilityQuery.type = t.key">{{ t.name }}</span>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>查询半径：{{ facilityQuery.radius }}m</label>
+                <input type="range" min="500" max="5000" step="500" v-model.number="facilityQuery.radius" style="width:100%;accent-color:var(--accent);" />
+              </div>
+              <button class="btn btn-primary" style="width:100%;" :disabled="!mapReady || facilityQuery.loading" @click="queryFacilitiesByCenter">
+                {{ facilityQuery.loading ? '查询中…' : '以地图中心查询周边设施' }}
+              </button>
+              <div v-if="facilityQuery.facilities.length" style="margin-top:10px;">
+                <div style="font-size:12px;color:var(--text-sub);margin-bottom:6px;">结果 {{ facilityQuery.facilities.length }} 个 · 点击行可定位</div>
+                <div v-for="f in facilityQuery.facilities" :key="f.id" style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid #f0f3f7;cursor:pointer;" @click="focusFacility(f)">
+                  <div>
+                    <div style="font-size:13px;">{{ f.name }}</div>
+                    <div class="muted" style="font-size:11px;">{{ f.address }} · {{ f.distance }}m</div>
+                  </div>
+                  <span class="link">定位</span>
+                </div>
+              </div>
+              <div v-else-if="facilityQuery.queried" class="empty" style="padding:14px 0;">该范围内暂无此类设施</div>
+            </div>
+          </template>
+
+          <!-- ===== 3. 建筑 ===== -->
+          <template v-if="activeModule === 'building'">
+            <div class="grid-2">
+              <div class="kpi"><div class="num">{{ building.total }}</div><div class="lbl">建筑总数</div></div>
+              <div class="kpi"><div class="num">{{ building.highrise }}</div><div class="lbl">高层建筑</div></div>
+              <div class="kpi"><div class="num" style="color:#e5484d;">{{ building.protected }}</div><div class="lbl">重点保护</div></div>
+              <div class="kpi"><div class="num">{{ building.green }}</div><div class="lbl">绿色建筑</div></div>
+            </div>
+            <div class="card">
+              <h4>标志性建筑（模拟）</h4>
+              <table>
+                <thead><tr><th>名称</th><th>年代</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="b in building.landmarks" :key="b.name">
+                    <td>{{ b.name }}</td>
+                    <td class="muted">{{ b.era }}</td>
+                    <td><a class="link" href="javascript:;" @click="locateByName(b.name)">定位</a></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card">
+              <h4>建筑属性查询</h4>
+              <div class="form-row">
+                <label>建筑名称</label>
+                <input v-model.trim="buildingQuery" placeholder="如：钟楼" @keyup.enter="queryBuilding" />
+              </div>
+              <button class="btn btn-primary" style="width:100%;" @click="queryBuilding">查询</button>
+              <div v-if="buildingResult" style="margin-top:10px;" class="card">
+                <div v-for="(v, k) in buildingResult" :key="k" style="font-size:13px; margin:4px 0;">
+                  <span class="muted">{{ k }}：</span>{{ v }}
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- ===== 5. 综合监管 ===== -->
+          <template v-if="activeModule === 'supervision'">
+            <div class="grid-2">
+              <div class="kpi"><div class="num">{{ supervise.deviceTotal }}</div><div class="lbl">接入设备</div></div>
+              <div class="kpi"><div class="num">{{ supervise.onlineRate }}%</div><div class="lbl">在线率</div></div>
+              <div class="kpi"><div class="num" style="color:#e5484d;">{{ supervise.todayAlarm }}</div><div class="lbl">今日告警</div></div>
+              <div class="kpi"><div class="num">{{ supervise.resolveRate }}%</div><div class="lbl">处置率</div></div>
+            </div>
+
+            <div class="card">
+              <h4>西安行政区划（占位图层）</h4>
+              <div class="district-chips">
+                <span v-for="d in districts" :key="d.name" class="chip"
+                      :class="{ disabled: !mapReady }" @click="focusDistrict(d)">{{ d.name }}</span>
+              </div>
+              <button class="btn btn-ghost" style="width:100%; color:#1b7cf0; border-color:#1b7cf0;"
+                      :disabled="!mapReady || !districtLayerConfigured" @click="loadDistrict">
+                {{ districtLoaded ? '行政区图层已加载' : '加载行政区图层' }}
+              </button>
+              <div class="muted" style="margin-top:8px;">
+                {{ districtLayerConfigured
+                    ? '点击区名：调用 queryGeoSceneFeature 按 name 字段过滤并高亮真实边界。'
+                    : '未配置 districtLayer.layerId，点区名将回退定位到该区中心（占位）。' }}
+              </div>
+            </div>
+
+            <div class="card">
+              <h4>专题图层控制</h4>
+              <div v-if="!layers.length" class="empty" style="padding:14px 0;">图层未加载（需先加载地图并配置 layerId）</div>
+              <div v-for="l in layers" :key="l.key" class="layer-item">
+                <input type="checkbox" :checked="l.visible" @change="toggleLayer(l.key, $event.target.checked)" />
+                <span style="font-size:13px;">{{ l.name }}</span>
+                <span class="muted" style="margin-left:auto;">{{ l.visible ? '显示' : '隐藏' }}</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <h4>空间查询</h4>
+              <div class="form-row">
+                <label>图层 ID（可选）</label>
+                <input v-model.trim="queryForm.layerId" placeholder="留空查服务根，如：0" />
+              </div>
+              <div class="form-row">
+                <label>过滤条件 where（可选）</label>
+                <input v-model.trim="queryForm.where" placeholder="如：name = '钟楼'" />
+              </div>
+              <div class="form-row">
+                <label>最大返回数</label>
+                <input v-model.number="queryForm.maxRecords" type="number" min="1" max="5000" />
+              </div>
+              <button class="btn btn-primary" style="width:100%;" :disabled="!mapReady || querying" @click="runQuery">
+                {{ querying ? '查询中…' : '执行空间查询' }}
+              </button>
+              <div v-if="queryResult.length" style="margin-top:10px;">
+                <div style="font-size:12px; color:var(--text-sub); margin-bottom:6px;">结果 {{ queryResult.length }} 条</div>
+                <table>
+                  <thead><tr><th>OBJECTID</th><th>属性摘要</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(f, i) in queryResult" :key="i">
+                      <td>{{ f.oid }}</td><td class="muted">{{ f.summary }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <h4>缓冲区分析</h4>
+              <div class="form-row">
+                <label>缓冲半径（米）</label>
+                <input v-model.number="bufferForm.distance" type="number" min="0" max="100000" />
+              </div>
+              <button class="btn btn-ghost" style="width:100%; color:#1b7cf0; border-color:#1b7cf0;" :disabled="!mapReady" @click="runBuffer">以地图中心做缓冲区分析</button>
+            </div>
+          </template>
+
+          <!-- ===== 6. 公园服务（口袋公园） ===== -->
+          <template v-if="activeModule === 'park'">
+            <div class="park-tabs">
+              <button v-for="t in parkTabs" :key="t.key" class="chip"
+                      :class="{ active: activeParkTab === t.key }" @click="switchParkTab(t.key)">
+                {{ t.name }}
+              </button>
+            </div>
+
+            <!-- ① 公园地图：周边查询 + 实时导航 + 设施状态 -->
+            <template v-if="activeParkTab === 'map'">
+              <div class="card">
+                <h4>周边口袋公园查询</h4>
+                <div class="form-row">
+                  <label>查询半径</label>
+                  <div style="display:flex;gap:16px;font-size:13px;">
+                    <label><input type="radio" value="500" v-model.number="parkNearby.radius" /> 500 m</label>
+                    <label><input type="radio" value="1000" v-model.number="parkNearby.radius" /> 1000 m</label>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" style="flex:1;" :disabled="!mapReady || parkLoading" @click="queryNearbyParks">
+                    {{ parkLoading ? '查询中…' : '以地图中心查询' }}
+                  </button>
+                  <button class="btn btn-ghost" style="color:#1b7cf0;border-color:#1b7cf0;" :disabled="parkLoading || !parkGeoOk" @click="locateAndQuery">
+                    📍 定位查询
+                  </button>
+                </div>
+                <div class="muted" style="margin-top:6px;">当前中心：{{ mapCenterText }}</div>
+              </div>
+
+              <div v-if="parkNearby.parks.length" class="card">
+                <h4>查询结果（{{ parkNearby.parks.length }} 个）</h4>
+                <div v-for="p in parkNearby.parks" :key="p.id" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <b style="font-size:13px;">{{ p.name }}</b>
+                    <span class="tag" :class="congestionTag(p.congestion)">{{ parkCongestionText(p) }}</span>
+                  </div>
+                  <div class="muted" style="margin-top:4px;">距你 {{ p.distance }}m · {{ p.area }}㎡ · {{ p.open_hours }}</div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text-sub);">
+                    <span>拥挤度 <b :style="{color: congestionColor(p.congestion)}">{{ p.congestion }}</b>/100</span>
+                    <span style="margin:0 4px;">·</span>
+                    <span>设施完好率 <b :style="{color: p.facility_integrity >= 90 ? 'var(--ok)' : (p.facility_integrity >= 70 ? 'var(--warn)' : 'var(--danger)')}">{{ p.facility_integrity }}%</b></span>
+                  </div>
+                  <div style="margin-top:8px;display:flex;gap:8px;">
+                    <button class="btn btn-ghost" style="flex:1;color:#1b7cf0;border-color:#1b7cf0;padding:5px 8px;font-size:12px;" :disabled="!mapReady" @click="navigateToPark(p)">🧭 实时导航</button>
+                    <button class="btn btn-ghost" style="flex:1;color:#1b7cf0;border-color:#1b7cf0;padding:5px 8px;font-size:12px;" @click="showParkStatus(p)">🏥 设施状态</button>
+                  </div>
+                  <div v-if="parkStatusShow === p.id">
+                    <div v-if="parkStatusLoading[p.id]" class="gov-skeleton skeleton-row" style="margin-top:8px;height:8px;"></div>
+                    <div v-else-if="parkStatus[p.id]" style="margin-top:8px;font-size:12px;background:#f5f8fb;border-radius:6px;padding:8px;">
+                      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                        <span>拥挤度：<b :style="{color: congestionColor(p.congestion)}">{{ parkStatus[p.id].park.congestion }}/100（{{ parkStatus[p.id].park.congestion_level?.text }}）</b></span>
+                        <span>设施完好率：<b>{{ parkStatus[p.id].park.facility_integrity }}%</b></span>
+                      </div>
+                      <div style="margin:4px 0;">设施明细：</div>
+                      <div v-for="f in parkStatus[p.id].facilities" :key="f.name" style="display:flex;justify-content:space-between;padding:2px 0;">
+                        <span>{{ f.name }}</span>
+                        <span :class="f.broken ? '' : ''">
+                          <b :style="{color: f.broken ? 'var(--danger)' : 'var(--ok)'}">{{ f.broken ? (f.total - f.broken) + '/' + f.total + ' 可用' : '全部完好' }}</b>
+                          <span v-if="f.broken" style="color:var(--danger);">（{{ f.broken }} {{ f.unit }}报修）</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div v-else class="muted" style="margin-top:8px;font-size:12px;">暂无设施状态数据</div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="!parkNearby.queried" class="empty">点击「以地图中心查询」查看 500m / 1000m 范围内的口袋公园</div>
+              <div v-else-if="!parkNearby.parks.length" class="empty">该范围内暂无口袋公园，可切换 1000m 再试</div>
+
+              <div v-if="parkNav" class="card">
+                <h4>实时导航（{{ parkNav.mode === 'driving' ? '驾车' : '步行' }}）</h4>
+                <div style="font-size:13px;">
+                  <div>目的地：<b>{{ parkNav.parkName }}</b></div>
+                  <div style="margin-top:4px;">距离 <b style="color:var(--accent);">{{ (parkNav.distance / 1000).toFixed(2) }} km</b> · 预计 <b style="color:var(--accent);">{{ parkNav.durationText }}</b></div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ② 需求众包采集 -->
+            <template v-if="activeParkTab === 'demand'">
+              <div class="card">
+                <h4>标记「希望建公园」地点</h4>
+                <button class="btn" :class="demandMarking ? 'btn-primary' : 'btn-ghost'"
+                        style="width:100%; border-color:#18a058;" @click="toggleDemandMarking">
+                  {{ demandMarking ? '✅ 请在地图上点击选取位置…' : '📍 在地图上标记位置' }}
+                </button>
+                <div v-if="demandPoint" class="muted" style="margin-top:6px;">
+                  已选位置：{{ demandPoint.lng.toFixed(5) }}, {{ demandPoint.lat.toFixed(5) }}
+                  <span class="link" @click="demandPoint = null">清除</span>
+                </div>
+                <div v-else class="muted" style="margin-top:6px;">点击按钮后，在地图上单击即可标记您希望建设公园的地点。</div>
+                <div class="form-row" style="margin-top:8px;">
+                  <label>需求标题</label>
+                  <input v-model.trim="demandForm.title" placeholder="如：希望在南二环附近建设口袋公园" />
+                </div>
+                <div class="form-row">
+                  <label>需求描述</label>
+                  <textarea v-model.trim="demandForm.description" rows="3" placeholder="描述现状与期望（缺少绿地、老人活动空间不足等）"></textarea>
+                </div>
+                <div class="form-row">
+                  <label>现场照片（选填）</label>
+                  <input type="file" accept="image/*" @change="onDemandPhoto" />
+                  <img v-if="demandForm.photoUrl" :src="demandForm.photoUrl" style="max-width:100%;max-height:120px;margin-top:6px;border-radius:6px;border:1px solid var(--border);" />
+                  <div v-if="demandForm.photoUrl" class="muted" style="margin-top:4px;">照片将压缩为缩略图后随需求提交。</div>
+                </div>
+                <button class="btn btn-primary" style="width:100%;" :disabled="submitting || !demandPoint" @click="submitDemand">
+                  {{ submitting ? '提交中…' : '提交需求' }}
+                </button>
+              </div>
+
+              <div class="card">
+                <h4>已提交需求（{{ parkDemands.length }}）</h4>
+                <div v-if="!parkDemands.length" class="empty">暂无众包需求，快来提交第一条吧</div>
+                <div v-for="d in parkDemands" :key="d.id" style="border-bottom:1px solid #f0f3f7;padding:8px 0;">
+                  <div style="font-size:13px;"><b>{{ d.title }}</b> <span class="tag" :class="demandStatusClass(d.status)">{{ demandStatusText(d.status) }}</span></div>
+                  <div class="muted" style="margin-top:2px;">{{ d.description }}</div>
+                  <img v-if="d.photo_url" :src="d.photo_url" style="max-width:100%;max-height:110px;margin-top:6px;border-radius:6px;border:1px solid var(--border);" />
+                  <div class="muted" style="margin-top:2px;">{{ d.reporter || '匿名' }} · {{ fmtTime(d.created_at) }}</div>
+                  <div v-if="canEdit(d.user_id) && editingDemandId !== d.id" class="own-actions">
+                    <button class="btn btn-ghost" style="color:#1b7cf0;border-color:#1b7cf0;" @click="startEditDemand(d)">✏️ 编辑</button>
+                    <button class="btn btn-ghost" style="color:#e5484d;border-color:#e5484d;" @click="deleteDemand(d)">🗑️ 删除</button>
+                  </div>
+                  <div v-if="editingDemandId === d.id" style="margin-top:6px;padding:8px;background:#f5f8fb;border-radius:8px;">
+                    <input v-model.trim="editDemandForm.title" placeholder="需求标题" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:6px;" />
+                    <textarea v-model.trim="editDemandForm.description" rows="2" placeholder="需求描述" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:6px;"></textarea>
+                    <div style="display:flex;gap:6px;">
+                      <button class="btn btn-primary" style="padding:4px 12px;font-size:12px;" @click="saveDemand(d)">保存</button>
+                      <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px;" @click="cancelEditDemand">取消</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ③ 选址投票参与 -->
+            <template v-if="activeParkTab === 'vote'">
+              <div class="card">
+                <h4>规划部门候选地块投票</h4>
+                <div class="muted" style="margin-bottom:8px;">对规划部门发布的候选地块进行投票与评论，点击星星即可评分。</div>
+                <button class="btn btn-ghost" style="width:100%;color:#1b7cf0;border-color:#1b7cf0;" @click="loadParkParcels">🔄 刷新候选地块</button>
+              </div>
+              <div v-if="!parkParcels.length" class="empty">暂无候选地块</div>
+              <div v-for="pl in parkParcels" :key="pl.id" class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <b style="font-size:13px;">{{ pl.name }}</b>
+                  <span class="tag info">{{ pl.district_name }}</span>
+                </div>
+                <div class="muted" style="margin-top:4px;">{{ pl.address }} · 面积 {{ pl.area }}㎡</div>
+                <div class="muted">{{ pl.description }}</div>
+                <div style="margin-top:6px;font-size:12px;">
+                  当前投票 <b>{{ pl.vote_count }}</b> 票 · 平均 <b style="color:var(--accent);">{{ pl.avg_score }}</b> 分
+                </div>
+                <div style="margin-top:8px;display:flex;gap:4px;align-items:center;">
+                  <span style="font-size:12px;color:var(--text-sub);margin-right:4px;">我的评分</span>
+                  <span v-for="s in 5" :key="s" style="cursor:pointer;font-size:20px;line-height:1;" @click="voteParcel(pl, s)">{{ s <= (voteScores[pl.id] || 0) ? '⭐' : '☆' }}</span>
+                  <span class="muted" style="font-size:12px;margin-left:6px;">{{ voteScores[pl.id] ? '已投 ' + voteScores[pl.id] + ' 分' : '' }}</span>
+                  <span v-if="voteScores[pl.id]" class="link" style="font-size:12px;margin-left:8px;color:#e5484d;" @click="retractVote(pl)">取消投票</span>
+                </div>
+                <div style="margin-top:8px;display:flex;gap:6px;">
+                  <input v-model.trim="commentForms[pl.id]" placeholder="发表你的评论…" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;" @keyup.enter="addComment(pl)" />
+                  <button class="btn btn-ghost" style="color:#1b7cf0;border-color:#1b7cf0;padding:5px 10px;font-size:12px;" @click="addComment(pl)">评论</button>
+                </div>
+                <div v-if="parcelComments[pl.id] && parcelComments[pl.id].length" style="margin-top:6px;border-top:1px dashed #e3e9f0;padding-top:6px;">
+                  <div v-for="cm in parcelComments[pl.id]" :key="cm.id" class="muted" style="font-size:12px;padding:3px 0;">
+                    {{ cm.content }}
+                    <span style="color:#9aa8bb;">— {{ cm.user_id }} · {{ fmtTime(cm.created_at) }}</span>
+                    <span v-if="canEdit(cm.user_id)" class="link" style="margin-left:6px;color:#e5484d;" @click="deleteComment(pl, cm)">删除</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ④ 使用后评价 -->
+            <template v-if="activeParkTab === 'review'">
+              <div class="card">
+                <h4>提交使用后评价</h4>
+                <div class="form-row">
+                  <label>选择公园</label>
+                  <select v-model.number="reviewForm.parkId">
+                    <option :value="0" disabled>请选择公园</option>
+                    <option v-for="p in reviewParkOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
+                  </select>
+                  <button class="btn btn-ghost" style="width:100%;color:#1b7cf0;border-color:#1b7cf0;margin-top:6px;padding:5px;" @click="loadReviewParks">🔄 加载公园列表</button>
+                </div>
+                <div class="form-row">
+                  <label>使用体验评分</label>
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <span v-for="s in 5" :key="s" style="cursor:pointer;font-size:22px;line-height:1;" @click="reviewForm.score = s">{{ s <= reviewForm.score ? '⭐' : '☆' }}</span>
+                    <span class="muted" style="margin-left:8px;">{{ reviewForm.score || 0 }}/5</span>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <label>体验描述</label>
+                  <textarea v-model.trim="reviewForm.experience" rows="2" placeholder="整体使用体验如何？"></textarea>
+                </div>
+                <div class="form-row">
+                  <label>设施报修</label>
+                  <input v-model.trim="reviewForm.repair" placeholder="如：东侧健身器材有一组损坏" />
+                </div>
+                <div class="form-row">
+                  <label>建议反馈</label>
+                  <textarea v-model.trim="reviewForm.suggestion" rows="2" placeholder="对公园运营/设施配置的建议…"></textarea>
+                </div>
+                <button class="btn btn-primary" style="width:100%;" :disabled="submitting || !reviewForm.parkId" @click="submitReview">
+                  {{ submitting ? '提交中…' : '提交评价' }}
+                </button>
+              </div>
+
+              <div class="card">
+                <h4>历史评价（{{ parkReviews.length }}）</h4>
+                <div v-if="!parkReviews.length" class="empty">暂无评价数据</div>
+                <div v-for="rv in parkReviews" :key="rv.id" style="border-bottom:1px solid #f0f3f7;padding:8px 0;">
+                  <div style="font-size:13px;"><b>{{ rv.park_name }}</b> <span>{{ '⭐'.repeat(Math.min(rv.score,5)) }}</span></div>
+                  <div class="muted">{{ rv.experience }}</div>
+                  <div v-if="rv.repair_desc" style="font-size:12px;color:var(--danger);margin-top:2px;">🔧 报修：{{ rv.repair_desc }}</div>
+                  <div v-if="rv.suggestion" style="font-size:12px;color:#c77f00;margin-top:2px;">💡 建议：{{ rv.suggestion }}</div>
+                  <div class="muted" style="font-size:11px;margin-top:2px;">{{ fmtTime(rv.created_at) }}</div>
+                  <div v-if="canEdit(rv.user_id) && editingReviewId !== rv.id" class="own-actions">
+                    <button class="btn btn-ghost" style="color:#1b7cf0;border-color:#1b7cf0;" @click="startEditReview(rv)">✏️ 编辑</button>
+                    <button class="btn btn-ghost" style="color:#e5484d;border-color:#e5484d;" @click="deleteReview(rv)">🗑️ 删除</button>
+                  </div>
+                  <div v-if="editingReviewId === rv.id" style="margin-top:6px;padding:8px;background:#f5f8fb;border-radius:8px;">
+                    <div style="font-size:12px;margin-bottom:4px;">评分：
+                      <span v-for="s in 5" :key="s" style="cursor:pointer;font-size:16px;" @click="editReviewForm.score = s">{{ s <= editReviewForm.score ? '⭐' : '☆' }}</span>
+                    </div>
+                    <textarea v-model.trim="editReviewForm.experience" rows="2" placeholder="体验描述" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:4px;"></textarea>
+                    <input v-model.trim="editReviewForm.repair" placeholder="设施报修" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:4px;" />
+                    <input v-model.trim="editReviewForm.suggestion" placeholder="建议反馈" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px;" />
+                    <div style="display:flex;gap:6px;">
+                      <button class="btn btn-primary" style="padding:4px 12px;font-size:12px;" @click="saveReview(rv)">保存</button>
+                      <button class="btn btn-ghost" style="padding:4px 12px;font-size:12px;" @click="cancelEditReview">取消</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ⑤ 选址分析（空间过滤 + 缓冲区分析 + 统计） -->
+            <template v-if="activeParkTab === 'analysis'">
+              <div class="card">
+                <h4>口袋公园选址分析</h4>
+                <div class="muted" style="margin-bottom:12px;line-height:1.7;">勾选启用需要参与的筛选条件，点击「开始选址分析」；未勾选的条件不参与空间过滤。</div>
+
+                <div class="filter-row" :class="{ off: !analysisForm.mode.enabled }">
+                  <label class="filter-label"><input type="checkbox" v-model="analysisForm.mode.enabled" /> 出行方式</label>
+                  <div class="filter-value">
+                    <select v-model="analysisForm.mode.value" :disabled="!analysisForm.mode.enabled">
+                      <option value="walking">步行</option>
+                      <option value="biking">骑行</option>
+                      <option value="driving">驾车</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="filter-row" :class="{ off: !analysisForm.time.enabled }">
+                  <label class="filter-label"><input type="checkbox" v-model="analysisForm.time.enabled" /> 出行用时</label>
+                  <div class="filter-value">
+                    <input v-model.number="analysisForm.time.value" type="number" min="1" max="720" :disabled="!analysisForm.time.enabled" />
+                    <select v-model="analysisForm.time.unit" class="unit-select" :disabled="!analysisForm.time.enabled">
+                      <option value="min">分钟</option>
+                      <option value="hour">小时</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="filter-row" :class="{ off: !analysisForm.area.enabled }">
+                  <label class="filter-label"><input type="checkbox" v-model="analysisForm.area.enabled" /> 面积（㎡）</label>
+                  <div class="filter-value area-value">
+                    <div class="seg-sm">
+                      <button type="button" class="seg-sm-btn" :class="{ active: analysisForm.area.mode === 'range' }" :disabled="!analysisForm.area.enabled" @click="analysisForm.area.mode = 'range'">范围</button>
+                      <button type="button" class="seg-sm-btn" :class="{ active: analysisForm.area.mode === 'fixed' }" :disabled="!analysisForm.area.enabled" @click="analysisForm.area.mode = 'fixed'">定值</button>
+                    </div>
+                    <template v-if="analysisForm.area.mode === 'range'">
+                      <input v-model.number="analysisForm.area.min" type="number" min="0" placeholder="最小" :disabled="!analysisForm.area.enabled" />
+                      <span class="range-sep">~</span>
+                      <input v-model.number="analysisForm.area.max" type="number" min="0" placeholder="最大" :disabled="!analysisForm.area.enabled" />
+                    </template>
+                    <template v-else>
+                      <input v-model.number="analysisForm.area.value" type="number" min="0" placeholder="目标面积" :disabled="!analysisForm.area.enabled" />
+                      <span class="range-sep">±</span>
+                      <input v-model.number="analysisForm.area.tol" type="number" min="0" max="100" placeholder="容差" :disabled="!analysisForm.area.enabled" class="tol-input" />
+                      <span class="unit-label">%</span>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="filter-row" :class="{ off: !analysisForm.building.enabled }">
+                  <label class="filter-label"><input type="checkbox" v-model="analysisForm.building.enabled" /> 建筑缓冲距离</label>
+                  <div class="filter-value">
+                    <input v-model.number="analysisForm.building.value" type="number" min="0" max="20000" :disabled="!analysisForm.building.enabled" />
+                    <select v-model="analysisForm.building.unit" class="unit-select" :disabled="!analysisForm.building.enabled">
+                      <option value="m">米</option>
+                      <option value="km">千米</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="filter-row" :class="{ off: !analysisForm.road.enabled }">
+                  <label class="filter-label"><input type="checkbox" v-model="analysisForm.road.enabled" /> 道路缓冲距离</label>
+                  <div class="filter-value">
+                    <input v-model.number="analysisForm.road.value" type="number" min="0" max="20000" :disabled="!analysisForm.road.enabled" />
+                    <select v-model="analysisForm.road.unit" class="unit-select" :disabled="!analysisForm.road.enabled">
+                      <option value="m">米</option>
+                      <option value="km">千米</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button class="btn btn-primary" style="width:100%;margin-top:6px;" :disabled="!mapReady || analyzing" @click="runParkAnalysis">
+                  {{ analyzing ? '分析中…' : '开始选址分析' }}
+                </button>
+              </div>
+              <div v-if="analysisResult" class="card">
+                <h4>分析统计</h4>
+                <div class="grid-3">
+                  <div class="kpi">
+                    <div class="num">{{ analysisResult.stats.count_init }}</div>
+                    <div class="lbl">count_init<br/>初始总候选地块</div>
+                  </div>
+                  <div class="kpi">
+                    <div class="num" style="color:#f0a020;">{{ analysisResult.stats.count_blind }}</div>
+                    <div class="lbl">count_blind<br/>公园服务盲区地块</div>
+                  </div>
+                  <div class="kpi">
+                    <div class="num" style="color:var(--ok);">{{ analysisResult.stats.count_reachable }}</div>
+                    <div class="lbl">count_reachable<br/>最终可选选址地块</div>
+                  </div>
+                </div>
+
+                <div class="stats-legend">
+                  <div><b>count_init</b> 初始总候选地块数量：经过面积筛选之后、尚未做任何公园/缓冲区裁剪前的地块总数（来源图层：<code>out_area_filter_site</code>）。代表原始符合面积条件的全部待选址地块。</div>
+                  <div><b>count_blind</b> 公园服务盲区地块数量：扣除现有公园服务范围后得到的盲区地块，尚未执行建筑、道路缓冲区裁剪（来源图层：<code>out_blind_result</code>）。代表不在现有公园服务范围内的候选地块总数。</div>
+                  <div><b>count_reachable</b> 最终可选公园选址地块数量：经过盲区 + 建筑缓冲 + 道路缓冲 + 网络出行筛选后，最终输出的可用选址地块数量（来源图层：<code>out_park_result</code>）。</div>
+                </div>
+
+                <div style="font-size:12px;color:var(--text-sub);line-height:1.8;">
+                  <div>· 原始候选地块总数：<b>{{ analysisResult.stats.count_total }}</b> 个</div>
+                  <div>· 面积筛选后（out_area_filter_site）：<b>{{ analysisResult.stats.count_init }}</b> 个</div>
+                  <div>· 公园盲区后（out_blind_result）：<b>{{ analysisResult.stats.count_blind }}</b> 个</div>
+                  <div v-if="analysisResult.stats.count_buffer !== null">· 缓冲区分析（建筑/道路）后：<b>{{ analysisResult.stats.count_buffer }}</b> 个</div>
+                  <div v-if="analysisResult.filters.mode || analysisResult.filters.timeThreshold">· 可达性筛选后：<b>{{ analysisResult.stats.count_reachable }}</b> 个</div>
+                </div>
+                <div class="muted" style="margin-top:8px;">已启用条件：{{ analysisFilterSummary }}</div>
+                <button class="btn btn-ghost" style="width:100%;color:#1b7cf0;border-color:#1b7cf0;margin-top:8px;" @click="drawAnalysisResult">🗺️ 在地图上显示结果</button>
+              </div>
+            </template>
+          </template>
+
+        </div>
+      </section>
+    </div>
+
+        <!-- ============ 登录 / 注册 / 忘记密码 / 修改密码 ============ -->
+    <div v-if="auth.show" class="auth-mask">
+      <div class="auth-deco">
+        <span class="deco-pin" style="left:12%;top:16%;animation-delay:0s;">📍</span>
+        <span class="deco-pin" style="right:14%;top:24%;animation-delay:1.2s;">🗼</span>
+        <span class="deco-pin" style="left:20%;bottom:22%;animation-delay:.6s;">🌳</span>
+        <span class="deco-pin" style="right:16%;bottom:16%;animation-delay:1.8s;">🚗</span>
+        <span class="deco-ring" style="left:6%;top:58%;"></span>
+        <span class="deco-ring" style="right:8%;top:12%;"></span>
+        <span class="deco-ring" style="left:58%;bottom:6%;"></span>
+      </div>
+      <div class="auth-card">
+        <div class="auth-head">
+          <div class="auth-brand">
+            <span class="auth-logo">🗺️</span>
+            <div>
+              <div class="auth-title">西安城市服务地图</div>
+              <div class="auth-sub">城市地图 · 实时路况 · 口袋公园</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab" :class="{ active: auth.mode === 'login' }" @click="openAuth('login')">登 录</button>
+          <button class="auth-tab" :class="{ active: auth.mode === 'register' }" @click="openAuth('register')">注 册</button>
+        </div>
+
+        <div class="auth-body">
+          <!-- 登录：账户 + 密码 -->
+          <template v-if="auth.mode === 'login'">
+            <div class="form-row">
+              <label>账户</label>
+              <input v-model.trim="auth.username" placeholder="请输入账户" @keyup.enter="doLogin" />
+            </div>
+            <div class="form-row">
+              <label>密码</label>
+              <input type="password" v-model="auth.password" placeholder="请输入密码" @keyup.enter="doLogin" />
+            </div>
+            <div v-if="auth.error" class="auth-error">{{ auth.error }}</div>
+            <button class="auth-btn" :disabled="auth.loading" @click="doLogin">{{ auth.loading ? '登录中…' : '登 录' }}</button>
+            <div class="auth-row">
+              <span class="auth-link" @click="openAuth('forgot')">忘记密码？</span>
+              <span class="auth-link" @click="openAuth('register')">没有账户？去注册</span>
+            </div>
+            <div class="auth-hint">注册后即可使用任意账户密码登录；多个用户可共用同一账户登录。</div>
+          </template>
+
+          <!-- 注册：账户 + 密码 -->
+          <template v-else-if="auth.mode === 'register'">
+            <div class="form-row">
+              <label>账户（3-20 位字母/数字/下划线/中文）</label>
+              <input v-model.trim="auth.username" placeholder="设置账户" />
+            </div>
+            <div class="form-row">
+              <label>密码（至少 6 位）</label>
+              <input type="password" v-model="auth.password" placeholder="设置密码" />
+            </div>
+            <div class="form-row">
+              <label>确认密码</label>
+              <input type="password" v-model="auth.confirmPassword" placeholder="再次输入密码" @keyup.enter="doRegister" />
+            </div>
+            <div v-if="auth.error" class="auth-error">{{ auth.error }}</div>
+            <button class="auth-btn" :disabled="auth.loading" @click="doRegister">{{ auth.loading ? '注册中…' : '注 册' }}</button>
+            <div class="auth-row">
+              <span class="auth-link" @click="openAuth('login')">已有账户？去登录</span>
+            </div>
+          </template>
+
+          <!-- 忘记密码：直接重置（账户 + 新密码） -->
+          <template v-else-if="auth.mode === 'forgot'">
+            <div class="form-row">
+              <label>账户</label>
+              <input v-model.trim="auth.username" placeholder="请输入注册账户" />
+            </div>
+            <div class="form-row">
+              <label>新密码（至少 6 位）</label>
+              <input type="password" v-model="auth.newPassword" placeholder="设置新密码" />
+            </div>
+            <div class="form-row">
+              <label>确认新密码</label>
+              <input type="password" v-model="auth.confirmPassword" placeholder="再次输入新密码" @keyup.enter="doForgot" />
+            </div>
+            <div v-if="auth.error" class="auth-error">{{ auth.error }}</div>
+            <button class="auth-btn" :disabled="auth.loading" @click="doForgot">{{ auth.loading ? '重置中…' : '直接重置密码' }}</button>
+            <div class="auth-row">
+              <span class="auth-link" @click="openAuth('login')">返回登录</span>
+            </div>
+          </template>
+
+          <!-- 修改密码（已登录） -->
+          <template v-else-if="auth.mode === 'changepwd'">
+            <div class="form-row">
+              <label>原密码</label>
+              <input type="password" v-model="auth.password" placeholder="输入当前密码" />
+            </div>
+            <div class="form-row">
+              <label>新密码（至少 6 位）</label>
+              <input type="password" v-model="auth.newPassword" placeholder="输入新密码" @keyup.enter="doChangePassword" />
+            </div>
+            <div v-if="auth.error" class="auth-error">{{ auth.error }}</div>
+            <button class="auth-btn" :disabled="auth.loading" @click="doChangePassword">{{ auth.loading ? '提交中…' : '确认修改' }}</button>
+            <div class="auth-row">
+              <span class="auth-link" @click="auth.show = false">取消</span>
+            </div>
+          </template>
+        </div>
+
+        <div class="auth-foot">
+          <div class="backend-status" :class="backendStatus">
+            <span class="dot" :class="backendStatus"></span>
+            <span v-if="backendStatus === 'ok'">后端服务已连接 ✓</span>
+            <span v-else-if="backendStatus === 'fail'">后端服务未连接，请确认已启动后端</span>
+            <span v-else>正在连接后端服务…</span>
+            <button v-if="backendStatus === 'fail'" class="backend-retry" @click="retryBackend">🔄 重试连接</button>
+          </div>
+          <button class="auth-guest" @click="guestLogin">👤 游客登录 · 免注册浏览</button>
+          <div class="auth-tip">游客可浏览地图与数据，提交需求/投票/评价等需登录账户</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 提示 toast -->
+    <div class="toast">
+      <div v-for="(t, i) in toasts" :key="i" class="toast-item" :class="t.type">{{ t.message }}</div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      const esc = (s) =>
+        (window.MapService && window.MapService.escapeHtml ? window.MapService.escapeHtml(s) : String(s));
+
+      const app = Vue.createApp({
+        data() {
+          return {
+            activeModule: "traffic",
+            mapReady: false,
+            loading: false,
+            mapStatus: "未加载",
+            mapView: null,
+            arcgisState: "idle",   // ArcGIS API 加载状态：idle/loading/ready/error
+            arcgisError: "",       // ArcGIS 未就绪时的错误信息
+            showConfigWarn: true,
+            toasts: [],
+            querying: false,
+            queryResult: [],
+            layers: [],
+            districts: [],
+            districtLoaded: false,
+            buildingQuery: "",
+            buildingResult: null,
+            queryForm: { layerId: "", where: "", maxRecords: 100 },
+            bufferForm: { distance: 500 },
+
+            // —— 公园服务（口袋公园） ——
+            parkTabs: [
+              { key: "map", name: "公园地图" },
+              { key: "demand", name: "需求众包" },
+              { key: "vote", name: "选址投票" },
+              { key: "review", name: "使用评价" },
+              { key: "analysis", name: "选址分析" },
+            ],
+            activeParkTab: "map",
+            parkLoading: false,
+            parkNearby: { radius: 1000, parks: [], queried: false },
+            parkStatus: {},          // parkId -> {park, facilities}
+            parkStatusLoading: {},   // parkId -> bool
+            parkStatusShow: null,    // 当前展开设施状态的公园 id
+            parkNav: null,           // 实时导航结果
+            parkGeoOk: false,        // 浏览器定位是否可用
+            parkDemands: [],         // 众包需求列表
+            demandMarking: false,    // 地图标记模式
+            demandPoint: null,       // 标记的点 {lng, lat}
+            demandForm: { title: "", description: "", photoUrl: "" },
+            submitting: false,
+            parkParcels: [],         // 候选地块
+            voteScores: {},          // parcelId -> 我的评分
+            commentForms: {},        // parcelId -> 评论草稿
+            parcelComments: {},      // parcelId -> [comments]
+            parkReviews: [],
+            reviewForm: { parkId: 0, score: 0, experience: "", repair: "", suggestion: "" },
+            reviewParkOptions: [],
+            analysisForm: {
+              mode:     { enabled: false, value: "walking" },
+              time:     { enabled: false, value: 15, unit: "min" },   // 出行用时：min(分钟) | hour(小时)，前端换算为分钟
+              area:     { enabled: false, mode: "range", value: 3000, tol: 20, min: 1000, max: 20000 }, // mode: range(范围) | fixed(定值)
+              building: { enabled: false, value: 300, unit: "m" },    // 建筑缓冲：m(米) | km(千米)，前端换算为米
+              road:     { enabled: false, value: 200, unit: "m" },    // 道路缓冲：m(米) | km(千米)，前端换算为米
+            },
+            analyzing: false,
+            analysisResult: null,
+            analysisDrawn: false,
+
+            // —— 实时路况 / 周边设施 ——
+            trafficLoading: false,
+            trafficSource: "",
+            facilityTypes: [
+              { key: "park", name: "公园" },
+              { key: "hospital", name: "医院" },
+              { key: "school", name: "学校" },
+              { key: "shopping", name: "商场" },
+              { key: "transport", name: "地铁" },
+              { key: "all", name: "全部" },
+            ],
+            facilityQuery: { type: "park", radius: 2000, facilities: [], queried: false, loading: false },
+
+            // —— 账号认证 / 数据归属 ——
+            auth: {
+              show: true,      // 未登录时全屏展示登录/注册页，登录成功后才显示地图服务
+              mode: "login",   // login | register | forgot | changepwd
+              username: "",
+              password: "",
+              confirmPassword: "",
+              newPassword: "",
+              loading: false,
+              error: "",
+            },
+            currentUser: null,
+            authToken: localStorage.getItem("sc_token") || "",
+            apiBase: "/api",          // 后端 API 基址（启动时自动探测，兼容 file:// / LiveServer / nginx 代理）
+            apiReady: false,          // API 基址是否已探测完成
+            backendStatus: "connecting", // connecting | ok | fail
+            guestMode: false,         // 游客登录（免账号浏览，提交数据需登录）
+            editingDemandId: null,
+            editDemandForm: { title: "", description: "" },
+            editingReviewId: null,
+            editReviewForm: { score: 0, experience: "", repair: "", suggestion: "" },
+
+            modules: [
+              { key: "traffic",     name: "智慧交通", ico: "🚦", desc: "路况流量分析" },
+              { key: "infra",       name: "基础设施", ico: "🏗️", desc: "设施分布监管" },
+              { key: "building",    name: "建筑",     ico: "🏢", desc: "建筑信息查询" },
+              { key: "supervision", name: "综合监管", ico: "📊", desc: "看板/图层/查询" },
+              { key: "park", name: "公园服务", ico: "🌳", desc: "口袋公园/众包/选址" },
+            ],
+
+            // —— 智慧交通（模拟） ——
+            traffic: {
+              todayFlow: 82.4, avgSpeed: 36, congested: 12, greenRate: 68,
+              roads: [
+                { name: "南二环", status: "拥堵", speed: 18 },
+                { name: "长安路", status: "缓行", speed: 32 },
+                { name: "高新路", status: "拥堵", speed: 15 },
+                { name: "曲江大道", status: "畅通", speed: 52 },
+                { name: "未央路", status: "缓行", speed: 30 },
+              ],
+              modes: [
+                { name: "地铁", ratio: 38 }, { name: "私家车", ratio: 25 },
+                { name: "公交", ratio: 22 }, { name: "出租车", ratio: 8 }, { name: "骑行", ratio: 7 },
+              ],
+            },
+
+            // —— 基础设施（模拟） ——
+            infra: {
+              total: 3260, onlineRate: 97.2,
+              types: [
+                { name: "通信基站", count: 1250, ratio: 38 },
+                { name: "变电站", count: 420, ratio: 13 },
+                { name: "燃气站", count: 260, ratio: 8 },
+                { name: "泵站", count: 180, ratio: 6 },
+                { name: "污水厂", count: 150, ratio: 5 },
+              ],
+              facilities: [
+                { name: "曲江变电站", type: "电力", status: "在线" },
+                { name: "高新通信枢纽", type: "通信", status: "在线" },
+                { name: "灞桥燃气站", type: "燃气", status: "在线" },
+                { name: "未央污水厂", type: "水务", status: "告警" },
+              ],
+            },
+
+            // —— 建筑（模拟） ——
+            building: {
+              total: 18420, highrise: 356, protected: 18, green: 420,
+              landmarks: [
+                { name: "钟楼", era: "明代" },
+                { name: "鼓楼", era: "明代" },
+                { name: "大雁塔", era: "唐代" },
+                { name: "陕西历史博物馆", era: "现代" },
+                { name: "西安城墙永宁门", era: "明代" },
+                { name: "高新区CBD双子塔", era: "现代" },
+              ],
+            },
+
+            // —— 综合监管（模拟） ——
+            supervise: {
+              deviceTotal: 12860, onlineRate: 96.4, todayAlarm: 37, resolveRate: 88.9,
+            },
+          };
+        },
+
+        computed: {
+          configEmpty() {
+            const cfg = window.GEO_CONFIG || {};
+            const hasService = !!String(cfg.mapServiceUrl || "").trim();
+            const bm = cfg.basemap || {};
+            const provider = String(bm.provider || "").trim().toLowerCase();
+            const hasBasemap =
+              (provider === "tianditu" && !!String(bm.tiandituToken || "").trim()) ||
+              provider === "amap" ||
+              provider === "arcgis" ||
+              (provider === "custom" && !!(String(bm.customUrl || cfg.basemapUrl || "").trim()));
+            return !hasService && !hasBasemap;
+          },
+          mapBadgeText() {
+            const cfg = window.GEO_CONFIG || {};
+            const bm = cfg.basemap || {};
+            const provider = String(bm.provider || "").trim().toLowerCase();
+            const serviceOk = !!String(cfg.mapServiceUrl || "").trim();
+            let base = "";
+            if (provider === "tianditu") base = "天地图";
+            else if (provider === "amap") base = "高德地图";
+            else if (provider === "custom") base = "自定义底图";
+            else if (provider === "arcgis") base = "ArcGIS底图";
+            if (serviceOk) base = base ? base + " · GeoScene" : "GeoScene";
+            return base || "未配置底图";
+          },
+          configLayers() {
+            const cfg = window.GEO_CONFIG || {};
+            return Array.isArray(cfg.thematicLayers) ? cfg.thematicLayers : [];
+          },
+          currentModule() {
+            return this.modules.find((m) => m.key === this.activeModule) || this.modules[0];
+          },
+          districtLayerConfigured() {
+            const cfg = window.GEO_CONFIG || {};
+            return !!(cfg.districtLayer && String(cfg.districtLayer.layerId || "").trim());
+          },
+          isLoggedIn() {
+            return !!this.authToken && !!this.currentUser;
+          },
+          mapCenterText() {
+            if (!this.mapView) return "—";
+            const c = this.mapView.center;
+            return c.longitude.toFixed(4) + ", " + c.latitude.toFixed(4);
+          },
+          analysisFilterSummary() {
+            if (!this.analysisResult) return "—";
+            const f = this.analysisResult.filters || {};
+            const parts = [];
+            if (f.mode) parts.push("出行方式：" + { walking: "步行", biking: "骑行", driving: "驾车" }[f.mode] || f.mode);
+            if (f.timeThreshold != null) parts.push("出行用时：" + f.timeThreshold + " 分钟");
+            if (f.minArea != null || f.maxArea != null) parts.push("面积区间：" + (f.minArea ?? "—") + "~" + (f.maxArea ?? "—") + " ㎡");
+            if (f.buildingBuffer != null) parts.push("建筑缓冲：" + f.buildingBuffer + " m");
+            if (f.roadBuffer != null) parts.push("道路缓冲：" + f.roadBuffer + " m");
+            return parts.join("；") || "—";
+          },
+        },
+
+        async mounted() {
+          // 解析后端 API 基址（修复 file:// 或端口不一致导致的 Failed to fetch）
+          await this.ensureApiReady();
+          // 账号认证：校验本地 token，未登录时展示全屏登录页（登录成功后才进入地图服务）
+          if (this.authToken) {
+            fetch(this.apiBase + "/auth/me", { headers: { Authorization: "Bearer " + this.authToken } })
+              .then((r) => r.json())
+              .then((d) => {
+                if (d.ok && d.user) {
+                  this.currentUser = d.user;
+                  this.auth.show = false;   // 登录态有效，进入地图服务
+                } else {
+                  this.authToken = "";
+                  localStorage.removeItem("sc_token");
+                  this.auth.show = true;
+                }
+              })
+              .catch(() => {
+                this.authToken = "";
+                localStorage.removeItem("sc_token");
+                this.auth.show = true;
+              });
+          } else {
+            this.auth.show = true;
+          }
+          // 浏览器定位能力检测（公园服务「定位查询」按钮）
+          this.parkGeoOk = !!(navigator && navigator.geolocation);
+          window.addEventListener("mapservice:warning", (e) => {
+            const msg = (e && e.detail && e.detail.message) || "地图服务告警";
+            this.pushToast(msg, "warn");
+          });
+          // ArcGIS API 加载状态事件（用于「未就绪」提示条）
+          window.addEventListener("mapservice:apiready", () => {
+            this.arcgisState = "ready";
+            this.arcgisError = "";
+          });
+          window.addEventListener("mapservice:apierror", (e) => {
+            this.arcgisState = "error";
+            this.arcgisError = (e && e.detail && e.detail.message) || "ArcGIS API 加载失败";
+          });
+          // 读取西安各区占位数据
+          if (window.MapService && typeof window.MapService.getDistricts === "function") {
+            this.districts = window.MapService.getDistricts();
+          }
+          // 快速体验入口：?guest=1 自动游客登录并加载本地西安地图
+          try {
+            if (new URLSearchParams(window.location.search).get("guest") === "1") {
+              this.guestLogin();
+              this.loadMap();
+            }
+          } catch (e) { /* 忽略旧浏览器不支持 URLSearchParams */ }
+        },
+
+        methods: {
+          switchModule(key) {
+            this.activeModule = key;
+            if (key === "park") {
+              if (!this.parkNearby.queried && this.mapReady) this.queryNearbyParks();
+              if (!this.parkDemands.length) this.loadParkDemands();
+              if (!this.parkParcels.length) this.loadParkParcels();
+              if (!this.parkReviews.length) this.loadParkReviews();
+            } else if (key === "traffic") {
+              if (this.mapReady) this.loadTrafficRealtime();
+            } else if (key !== "park" && window.MapService && window.MapService.clearGraphics) {
+              // 离开公园模块时清理相关图形层
+              ["park-parks", "park-demands", "park-parcels", "park-route", "park-analysis", "facility-points"].forEach((n) => window.MapService.clearGraphics(n));
+              this.analysisDrawn = false;
+            }
+          },
+          dismissConfigWarn() { this.showConfigWarn = false; },
+
+          pushToast(message, type) {
+            this.toasts.push({ message: esc(message), type: type || "info" });
+            setTimeout(() => this.toasts.shift(), 4000);
+          },
+
+          statusClass(status) {
+            if (status === "在线" || status === "已处理" || status === "畅通") return "ok";
+            if (status === "告警" || status === "处置中" || status === "缓行") return "warn";
+            if (status === "拥堵") return "err";
+            return "info";
+          },
+          roadClass(status) {
+            if (status === "畅通") return "ok";
+            if (status === "缓行") return "warn";
+            if (status === "拥堵" || status === "严重拥堵") return "err";
+            return "info";
+          },
+
+          /* ---------- 地图命令 ---------- */
+          async loadMap() {
+            if (!window.MapService) { this.pushToast("mapService.js 未加载", "err"); return; }
+            this.arcgisState = "loading";
+            this.arcgisError = "";
+            this.loading = true;
+            this.mapStatus = "加载中";
+
+            const res = await window.MapService.loadGeoSceneMap({ container: "map" });
+            if (!res.ok) {
+              this.loading = false;
+              this.mapStatus = "失败";
+              this.pushToast(res.error || "地图加载失败", "err");
+              return;
+            }
+
+            this.mapView = Vue.markRaw(res.view);
+            this.mapReady = true;
+            this.mapStatus = "已就绪";
+            this.pushToast("地图加载成功（EPSG:4490 · " + (res.basemapProvider || "底图") + "）", "ok");
+            this.bindMapClick(res.view);
+
+            // 加载专题图层
+            const layersRes = await window.MapService.loadThematicLayers();
+            // 加载行政区划图层（若已配置 layerId）
+            if (this.districtLayerConfigured) {
+              const districtRes = await window.MapService.loadDistrictLayer();
+              if (districtRes.ok) this.districtLoaded = true;
+            }
+            this.loading = false;
+            this.refreshLayers();
+
+            if (layersRes.ok && layersRes.count) {
+              this.pushToast("专题图层加载 " + layersRes.count + " 个", "ok");
+            } else if (layersRes.error) {
+              this.pushToast(layersRes.error, "warn");
+            }
+          },
+
+          refreshLayers() {
+            if (window.MapService && typeof window.MapService.getLayersStatus === "function") {
+              this.layers = window.MapService.getLayersStatus();
+            }
+          },
+
+          toggleLayer(key, visible) {
+            if (window.MapService) window.MapService.setLayerVisibility(key, visible);
+            const l = this.layers.find((x) => x.key === key);
+            if (l) l.visible = visible;
+          },
+
+          async loadDistrict() {
+            if (!this.mapReady || !window.MapService) { this.pushToast("请先加载地图", "warn"); return; }
+            const res = await window.MapService.loadDistrictLayer();
+            if (res.ok) {
+              this.districtLoaded = true;
+              this.refreshLayers();
+              this.pushToast("行政区图层加载成功", "ok");
+            } else {
+              this.pushToast(res.error || "行政区图层加载失败", "warn");
+            }
+          },
+
+          async focusDistrict(d) {
+            if (!this.mapReady || !window.MapService) { this.pushToast("请先加载地图", "warn"); return; }
+            // 优先：调用 queryGeoSceneFeature 按 name 字段过滤，高亮选中真实行政边界
+            const res = await window.MapService.highlightDistrict(d.name);
+            if (res.ok) {
+              this.pushToast("已高亮 " + d.name + " 行政边界", "ok");
+              return;
+            }
+            // 回退：行政区图层未发布时，定位到该区中心点（占位）
+            if (this.mapView && d.center) {
+              this.mapView.goTo({ center: d.center, zoom: 13 }).catch(() => {});
+              this.pushToast("行政区图层未就绪，已定位到 " + d.name + " 中心（占位）", "warn");
+            }
+          },
+
+          bindMapClick(view) {
+            if (!view || typeof view.on !== "function") return;
+            view.on("click", async (event) => {
+              const mp = event.mapPoint;
+              if (!mp) return;
+              // 需求众包：标记「希望建公园」位置
+              if (this.demandMarking) {
+                this.demandPoint = { lng: mp.longitude, lat: mp.latitude };
+                this.demandMarking = false;
+                if (window.MapService && window.MapService.drawGraphics) {
+                  await window.MapService.drawGraphics({
+                    name: "park-demands",
+                    clear: false,
+                    graphics: [{
+                      type: "point",
+                      geometry: { longitude: mp.longitude, latitude: mp.latitude },
+                      symbol: { color: "#f59e0b", size: 14 },
+                    }],
+                  });
+                }
+                this.pushToast("已标记位置（" + mp.longitude.toFixed(5) + ", " + mp.latitude.toFixed(5) + "），请填写需求信息", "ok");
+                return;
+              }
+              const extent = view.extent;
+              const res = await window.MapService.identifyGeoScene({
+                point: { longitude: mp.longitude, latitude: mp.latitude },
+                mapExtent: extent
+                  ? { xmin: extent.xmin, ymin: extent.ymin, xmax: extent.xmax, ymax: extent.ymax }
+                  : null,
+              });
+              if (res.ok && res.count > 0) {
+                this.pushToast("识别到 " + res.count + " 个要素", "ok");
+              } else if (res.ok) {
+                this.pushToast("该位置未识别到要素", "info");
+              }
+            });
+          },
+
+          summarizeAttrs(attrs) {
+            if (!attrs) return "无属性";
+            return Object.entries(attrs).slice(0, 4)
+              .map(([k, v]) => esc(k) + ": " + esc(v)).join("；");
+          },
+
+          locateByName(name) {
+            if (!this.mapReady || !window.MapService) {
+              this.pushToast("请先加载地图", "warn");
+              return;
+            }
+            const safeName = esc(name).replace(/'/g, "''");
+            window.MapService.highlightGeoSceneFeature({ where: "name = '" + safeName + "'" })
+              .then((res) => { if (!res.ok) this.pushToast(res.error || "定位失败", "warn"); });
+          },
+
+          async queryBuilding() {
+            const name = String(this.buildingQuery || "").trim();
+            if (!name) { this.pushToast("请输入建筑名称", "warn"); return; }
+            try {
+              const res = await fetch("./data/xian/buildings.index.json");
+              if (!res.ok) throw new Error("HTTP " + res.status);
+              const data = await res.json();
+              const k = name.toLowerCase();
+              const item = (data.sample || []).find((b) =>
+                String(b.id != null ? b.id : "").toLowerCase().indexOf(k) >= 0 ||
+                String(b.oid != null ? b.oid : "").toLowerCase().indexOf(k) >= 0 ||
+                String(b.area != null ? b.area : "").indexOf(k) >= 0
+              ) || (data.sample || [])[0];
+
+              if (item) {
+                const id = item.id != null ? String(item.id) : String(item.oid);
+                const area = Number(item.area) || 0;
+                this.buildingResult = {
+                  "名称": "西安建筑体块 #" + id,
+                  "地址": "西安市城区（坐标 " + Number(item.lng).toFixed(5) + ", " + Number(item.lat).toFixed(5) + "）",
+                  "建筑面积": area.toFixed(1) + " m²",
+                  "顶点数": String(item.point != null ? item.point : "—"),
+                  "数据源": "xa22Building_mass 抽样",
+                };
+                if (this.mapReady && window.MapService && window.MapService.focusPoint) {
+                  await window.MapService.focusPoint({ longitude: item.lng, latitude: item.lat, zoom: 16 });
+                } else if (this.mapView) {
+                  await this.mapView.goTo({ center: [item.lng, item.lat], zoom: 16 }).catch(() => {});
+                }
+                this.pushToast("已定位到本地建筑体块 #" + id, "ok");
+              } else {
+                this.buildingResult = { "名称": name, "地址": "西安本地建筑索引中未找到匹配体块", "说明": "可输入建筑编号或面积" };
+              }
+            } catch (e) {
+              this.buildingResult = {
+                "名称": name,
+                "地址": "西安市（本地建筑索引暂不可用）",
+                "说明": e.message,
+              };
+              if (this.mapView) {
+                await this.mapView.goTo({ center: [108.9422, 34.2609], zoom: 13 }).catch(() => {});
+              }
+            }
+          },
+
+          async runQuery() {
+            if (!window.MapService) return;
+            this.querying = true;
+            const res = await window.MapService.queryGeoSceneFeature({
+              layerId: this.queryForm.layerId,
+              where: this.queryForm.where,
+              maxRecords: this.queryForm.maxRecords,
+              returnGeometry: true,
+            });
+            this.querying = false;
+            if (res.ok) {
+              this.queryResult = res.features.map((f) => ({
+                oid: (f.attributes && f.attributes.OBJECTID) || "—",
+                summary: this.summarizeAttrs(f.attributes),
+              }));
+              this.pushToast("查询到 " + res.count + " 条要素", "ok");
+            } else {
+              this.pushToast(res.error || "查询失败", "err");
+            }
+          },
+
+          runBuffer() {
+            if (!this.mapReady || !window.MapService || !this.mapView) {
+              this.pushToast("请先加载地图", "warn");
+              return;
+            }
+            const c = this.mapView.center;
+            window.MapService.bufferGeoScene({
+              point: { longitude: c.longitude, latitude: c.latitude },
+              distance: this.bufferForm.distance,
+            }).then((res) => {
+              if (res.ok) this.pushToast("缓冲区分析完成（" + res.distance + " 米）", "ok");
+              else this.pushToast(res.error || "缓冲区分析失败", "err");
+            });
+          },
+
+          /* ==================== 实时路况 / 周边设施 ==================== */
+          async trafficApi(path, opts = {}) {
+            await this.ensureApiReady();
+            const base = this.apiBase + "/traffic";
+            const headers = {
+              "Content-Type": "application/json",
+              ...(this.authToken ? { Authorization: "Bearer " + this.authToken } : {}),
+              "X-Module": "traffic",
+              "X-Role": sessionStorage.getItem("role") || "public",
+              "X-District": sessionStorage.getItem("district") || "all",
+              "X-Session-Id": sessionStorage.getItem("sessionId") || ("web-" + Date.now()),
+            };
+            const qs = Object.entries(opts.params || {})
+              .filter(([, v]) => v !== undefined && v !== null && v !== "")
+              .map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v))
+              .join("&");
+            return this._req(qs ? base + path + "?" + qs : base + path, { method: "GET", headers });
+          },
+
+          async facilityApi(path, opts = {}) {
+            await this.ensureApiReady();
+            const base = this.apiBase + "/facility";
+            const headers = {
+              "Content-Type": "application/json",
+              ...(this.authToken ? { Authorization: "Bearer " + this.authToken } : {}),
+              "X-Module": "facility",
+              "X-Role": sessionStorage.getItem("role") || "public",
+              "X-District": sessionStorage.getItem("district") || "all",
+              "X-Session-Id": sessionStorage.getItem("sessionId") || ("web-" + Date.now()),
+            };
+            const qs = Object.entries(opts.params || {})
+              .filter(([, v]) => v !== undefined && v !== null && v !== "")
+              .map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v))
+              .join("&");
+            return this._req(qs ? base + path + "?" + qs : base + path, { method: "GET", headers });
+          },
+
+          /** 加载实时路况（高德交通态势，失败自动降级 mock） */
+          async loadTrafficRealtime() {
+            this.trafficLoading = true;
+            try {
+              const data = await this.trafficApi("/realtime", { params: {} });
+              const roads = data.roads || [];
+              if (roads.length) {
+                this.traffic.roads = roads;
+                this.trafficSource = data.source === "amap" ? "高德实时路况" : "模拟路况（高德不可用）";
+                // 由实时数据计算指标
+                const speeds = roads.map((r) => Number(r.speed) || 0);
+                const ok = roads.filter((r) => r.status === "畅通").length;
+                const warn = roads.filter((r) => r.status === "缓行").length;
+                const bad = roads.filter((r) => r.status === "拥堵" || r.status === "严重拥堵").length;
+                const total = roads.length || 1;
+                this.traffic.avgSpeed = Math.round(speeds.reduce((s, v) => s + v, 0) / total);
+                this.traffic.congested = bad;
+                this.traffic.todayFlow = Math.round((ok * 100 + warn * 68 + bad * 32) / total); // 实时通行指数 0-100
+              }
+            } catch (e) {
+              this.pushToast(e.message || "路况加载失败", "err");
+            } finally {
+              this.trafficLoading = false;
+            }
+          },
+
+          /** 周边设施查询（高德POI；loc 为空时用地图中心） */
+          async queryFacilities(loc) {
+            if (!this.mapReady) { this.pushToast("请先加载地图", "warn"); return; }
+            const c = loc || (this.mapView && this.mapView.center);
+            if (!c) { this.pushToast("无法获取查询中心", "warn"); return; }
+            this.facilityQuery.loading = true;
+            try {
+              const data = await this.facilityApi("/nearby", {
+                params: { lng: c.longitude ?? c.lng, lat: c.latitude ?? c.lat, radius: this.facilityQuery.radius, type: this.facilityQuery.type },
+              });
+              this.facilityQuery.facilities = data.facilities || [];
+              this.facilityQuery.queried = true;
+              this.drawFacilitiesOnMap(this.facilityQuery.facilities);
+              this.pushToast("查询到 " + data.count + " 个周边设施" + (data.source === "amap" ? "（高德）" : "（模拟）"), data.count ? "ok" : "info");
+            } catch (e) {
+              this.pushToast(e.message || "设施查询失败", "err");
+            } finally {
+              this.facilityQuery.loading = false;
+            }
+          },
+
+          queryFacilitiesByCenter() {
+            this.queryFacilities(null);
+          },
+
+          async drawFacilitiesOnMap(facilities) {
+            if (!window.MapService || !window.MapService.drawGraphics || !facilities.length) return;
+            const colors = { park: "#18a058", hospital: "#e5484d", school: "#7c3aed", shopping: "#f0a020", transport: "#1b7cf0" };
+            const graphics = facilities.map((f) => ({
+              type: "point",
+              geometry: { longitude: f.lng, latitude: f.lat },
+              symbol: { color: colors[f.type] || "#3f8efc", size: 11, outlineColor: "#ffffff", outlineWidth: 2 },
+              attributes: { name: f.name, type: f.type, distance: f.distance },
+            }));
+            await window.MapService.drawGraphics({ name: "facility-points", graphics });
+          },
+
+          /** 一键定位（顶栏）：定位到我的位置并查询周边口袋公园 */
+          locateMe() {
+            if (!this.mapReady) { this.pushToast("请先加载地图", "warn"); return; }
+            if (!navigator.geolocation) { this.pushToast("当前浏览器不支持定位", "warn"); return; }
+            navigator.geolocation.getCurrentPosition(
+              async (pos) => {
+                const p = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+                this.pushToast("已定位，正在查询周边口袋公园", "ok");
+                if (window.MapService && window.MapService.focusPoint) {
+                  await window.MapService.focusPoint({ longitude: p.lng, latitude: p.lat, zoom: 15 });
+                }
+                this.queryNearbyParks(p);
+              },
+              () => { this.pushToast("定位失败，请检查浏览器权限；可在地图上手动点击", "warn"); },
+              { enableHighAccuracy: true, timeout: 9000 }
+            );
+          },
+
+          /** 定位到某个设施/公园 */
+          async focusFacility(f) {
+            if (!f || !Number.isFinite(f.lng) || !Number.isFinite(f.lat)) {
+              this.pushToast("该设施暂无坐标", "warn");
+              return;
+            }
+            if (window.MapService && window.MapService.focusPoint) {
+              await window.MapService.focusPoint({ longitude: f.lng, latitude: f.lat, zoom: 16 });
+              this.pushToast("已定位：" + (f.name || "设施"), "ok");
+            } else {
+              this.pushToast("地图未就绪", "warn");
+            }
+          },
+
+          /** 定位到某个路段（高德返回坐标时） */
+          async focusTrafficRoad(r) {
+            if (r && Number.isFinite(r.lng) && Number.isFinite(r.lat)) {
+              await this.focusFacility({ name: r.name, lng: r.lng, lat: r.lat });
+            } else if (this.mapView) {
+              await this.mapView.goTo({ zoom: 14 }).catch(() => {});
+              this.pushToast("该路段暂无坐标（模拟数据），已放大地图", "info");
+            }
+          },
+
+          /* ==================== 公园服务（口袋公园） ==================== */
+          async parkApi(path, opts = {}) {
+            await this.ensureApiReady();
+            const base = this.apiBase + "/park";
+            const headers = {
+              "Content-Type": "application/json",
+              ...(this.authToken ? { Authorization: "Bearer " + this.authToken } : {}),
+              "X-Module": "park",
+              "X-Role": sessionStorage.getItem("role") || "public",
+              "X-District": sessionStorage.getItem("district") || "all",
+              "X-Session-Id": sessionStorage.getItem("sessionId") || ("web-" + Date.now()),
+            };
+            if (opts.method && opts.method !== "GET") {
+              return this._req(base + path, { method: opts.method, headers, body: JSON.stringify(opts.body || {}) });
+            }
+            const qs = Object.entries(opts.params || {})
+              .filter(([, v]) => v !== undefined && v !== null && v !== "")
+              .map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v))
+              .join("&");
+            return this._req(qs ? base + path + "?" + qs : base + path, { method: "GET", headers });
+          },
+
+          switchParkTab(key) {
+            this.activeParkTab = key;
+            if (key === "demand" && !this.parkDemands.length) this.loadParkDemands();
+            if (key === "vote" && !this.parkParcels.length) this.loadParkParcels();
+            if (key === "review") {
+              this.loadParkReviews();
+              if (!this.reviewParkOptions.length) this.loadReviewParks();
+            }
+          },
+
+          congestionTag(c) {
+            if (c >= 60) return "err";
+            if (c >= 40) return "warn";
+            return "ok";
+          },
+          congestionColor(c) {
+            if (c >= 60) return "#e5484d";
+            if (c >= 40) return "#f0a020";
+            return "#18a058";
+          },
+          parkCongestionText(p) {
+            return (p.congestion_level && p.congestion_level.text) || (p.congestion >= 60 ? "较拥挤" : p.congestion >= 40 ? "一般" : "畅通");
+          },
+          demandStatusText(s) {
+            return { pending: "待审核", reviewing: "审核中", adopted: "已采纳", rejected: "未采纳" }[s] || s || "待审核";
+          },
+          demandStatusClass(s) {
+            if (s === "adopted") return "ok";
+            if (s === "rejected") return "err";
+            if (s === "reviewing") return "warn";
+            return "info";
+          },
+          fmtTime(t) {
+            if (!t) return "";
+            const d = new Date(t);
+            if (isNaN(d.getTime())) return String(t);
+            const p = (n) => String(n).padStart(2, "0");
+            return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+          },
+
+          /* —— ① 公园地图：周边查询 / 导航 / 设施状态 —— */
+          async queryNearbyParks(loc) {
+            if (!this.mapReady) { this.pushToast("请先加载地图", "warn"); return; }
+            const c = loc || (this.mapView && this.mapView.center);
+            if (!c) { this.pushToast("无法获取查询中心点", "warn"); return; }
+            this.parkLoading = true;
+            try {
+              const data = await this.parkApi("/nearby", {
+                params: { lng: c.longitude ?? c.lng, lat: c.latitude ?? c.lat, radius: this.parkNearby.radius },
+              });
+              this.parkNearby.parks = data.parks || [];
+              this.parkNearby.queried = true;
+              this.parkNav = null;
+              this.drawParksOnMap(this.parkNearby.parks);
+              this.pushToast("查询到 " + data.count + " 个周边口袋公园", data.count ? "ok" : "info");
+            } catch (e) {
+              this.pushToast(e.message || "周边查询失败", "err");
+            } finally {
+              this.parkLoading = false;
+            }
+          },
+
+          locateAndQuery() {
+            if (!navigator.geolocation) { this.pushToast("当前浏览器不支持定位", "warn"); return; }
+            this.parkGeoOk = true;
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                const loc = { longitude: pos.coords.longitude, latitude: pos.coords.latitude };
+                this.pushToast("已获取定位，正在查询周边公园", "ok");
+                this.queryNearbyParks(loc);
+              },
+              () => { this.pushToast("定位失败，请在地图上调整中心点后重试", "warn"); },
+              { enableHighAccuracy: true, timeout: 8000 }
+            );
+          },
+
+          async drawParksOnMap(parks) {
+            if (!window.MapService || !window.MapService.drawGraphics || !parks.length) return;
+            const graphics = parks.map((p) => ({
+              type: "point",
+              geometry: { longitude: p.lng, latitude: p.lat },
+              symbol: { color: p.congestion >= 60 ? "#f59e0b" : "#18a058", size: 12 },
+              attributes: { name: p.name, distance: p.distance },
+            }));
+            await window.MapService.drawGraphics({ name: "park-parks", graphics });
+            if (window.MapService.zoomToGraphics) window.MapService.zoomToGraphics("park-parks");
+          },
+
+          async navigateToPark(p) {
+            if (!this.mapView) { this.pushToast("请先加载地图", "warn"); return; }
+            const c = this.mapView.center;
+            try {
+              const data = await this.parkApi("/navigate", {
+                params: { fromLng: c.longitude, fromLat: c.latitude, toLng: p.lng, toLat: p.lat, mode: "walking" },
+              });
+              this.parkNav = Object.assign({}, data, { parkName: p.name });
+              if (window.MapService && window.MapService.drawGraphics) {
+                await window.MapService.drawGraphics({
+                  name: "park-route",
+                  graphics: [
+                    { type: "polyline", geometry: { paths: data.path || [[c.longitude, c.latitude], [p.lng, p.lat]] }, symbol: { color: "#e5484d", width: 4 } },
+                    { type: "point", geometry: { longitude: p.lng, latitude: p.lat }, symbol: { color: "#18a058", size: 12 } },
+                  ],
+                });
+                if (window.MapService.zoomToGraphics) window.MapService.zoomToGraphics("park-route");
+              }
+              this.pushToast("导航规划完成：" + data.durationText, "ok");
+            } catch (e) {
+              this.pushToast(e.message || "导航规划失败", "err");
+            }
+          },
+
+          async showParkStatus(p) {
+            if (this.parkStatusShow === p.id) { this.parkStatusShow = null; return; }
+            this.parkStatusShow = p.id;
+            this.parkStatusLoading = Object.assign({}, this.parkStatusLoading, { [p.id]: true });
+            try {
+              const data = await this.parkApi("/status/" + p.id);
+              this.parkStatus = Object.assign({}, this.parkStatus, { [p.id]: data });
+            } catch (e) {
+              this.pushToast(e.message || "设施状态获取失败", "err");
+            } finally {
+              this.parkStatusLoading = Object.assign({}, this.parkStatusLoading, { [p.id]: false });
+            }
+          },
+
+          /* —— ② 需求众包采集 —— */
+          toggleDemandMarking() {
+            if (!this.mapReady) { this.pushToast("请先加载地图", "warn"); return; }
+            this.demandMarking = !this.demandMarking;
+            this.pushToast(this.demandMarking ? "请在地图上单击标记「希望建公园」位置" : "已取消标记", this.demandMarking ? "info" : "warn");
+          },
+
+          onDemandPhoto(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            if (!/^image\//.test(file.type)) { this.pushToast("请选择图片文件", "warn"); return; }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const img = new Image();
+              img.onload = () => {
+                const maxW = 640;
+                const scale = Math.min(1, maxW / (img.width || maxW));
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.round((img.width || maxW) * scale));
+                canvas.height = Math.max(1, Math.round((img.height || maxW) * scale));
+                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+                this.demandForm.photoUrl = canvas.toDataURL("image/jpeg", 0.7);
+                this.pushToast("照片已压缩为缩略图", "ok");
+              };
+              img.onerror = () => this.pushToast("图片读取失败", "err");
+              img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+          },
+
+          async submitDemand() {
+            if (!this.ensureLogin()) return;
+            if (!this.demandPoint) { this.pushToast("请先在地图上标记位置", "warn"); return; }
+            if (!this.demandForm.title.trim()) { this.pushToast("请填写需求标题", "warn"); return; }
+            this.submitting = true;
+            try {
+              const data = await this.parkApi("/demands", {
+                method: "POST",
+                body: {
+                  title: this.demandForm.title,
+                  description: this.demandForm.description,
+                  reporter: "",
+                  photoUrl: this.demandForm.photoUrl,
+                  lng: this.demandPoint.lng,
+                  lat: this.demandPoint.lat,
+                },
+              });
+              this.parkDemands.unshift(data.demand);
+              this.demandForm = { title: "", description: "", photoUrl: "" };
+              this.demandPoint = null;
+              this.pushToast("需求提交成功", "ok");
+            } catch (e) {
+              this.pushToast(e.message || "需求提交失败", "err");
+            } finally {
+              this.submitting = false;
+            }
+          },
+
+          async loadParkDemands() {
+            try {
+              const data = await this.parkApi("/demands");
+              this.parkDemands = data.demands || [];
+            } catch (e) {
+              this.pushToast(e.message || "需求列表加载失败", "err");
+            }
+          },
+
+          /* —— ③ 选址投票参与 —— */
+          async loadParkParcels() {
+            try {
+              const data = await this.parkApi("/parcels");
+              this.parkParcels = data.parcels || [];
+              const scores = {};
+              this.parkParcels.forEach((pl) => { if (pl.my_score != null) scores[pl.id] = pl.my_score; });
+              this.voteScores = scores;
+              this.parkParcels.forEach((pl) => this.loadParcelComments(pl));
+            } catch (e) {
+              this.pushToast(e.message || "候选地块加载失败", "err");
+            }
+          },
+
+          async loadParcelComments(pl) {
+            try {
+              const data = await this.parkApi("/parcels/" + pl.id + "/comments");
+              this.parcelComments = Object.assign({}, this.parcelComments, { [pl.id]: data.comments || [] });
+            } catch (e) { /* 静默失败 */ }
+          },
+
+          async voteParcel(pl, score) {
+            if (!this.ensureLogin()) return;
+            try {
+              await this.parkApi("/parcels/" + pl.id + "/vote", { method: "POST", body: { score } });
+              this.voteScores = Object.assign({}, this.voteScores, { [pl.id]: score });
+              this.loadParkParcels();
+              this.pushToast("投票成功：" + score + " 分", "ok");
+            } catch (e) {
+              this.pushToast(e.message || "投票失败", "err");
+            }
+          },
+
+          async addComment(pl) {
+            if (!this.ensureLogin()) return;
+            const content = (this.commentForms[pl.id] || "").trim();
+            if (!content) { this.pushToast("请输入评论内容", "warn"); return; }
+            try {
+              await this.parkApi("/parcels/" + pl.id + "/comments", { method: "POST", body: { content } });
+              this.commentForms = Object.assign({}, this.commentForms, { [pl.id]: "" });
+              await this.loadParcelComments(pl);
+              this.pushToast("评论已发布", "ok");
+            } catch (e) {
+              this.pushToast(e.message || "评论失败", "err");
+            }
+          },
+
+          /* —— ④ 使用后评价 —— */
+          async loadParkReviews() {
+            try {
+              const data = await this.parkApi("/reviews");
+              this.parkReviews = data.reviews || [];
+            } catch (e) { /* 静默失败 */ }
+          },
+
+          async loadReviewParks() {
+            const c = this.mapView ? this.mapView.center : { longitude: 108.9422, latitude: 34.2609 };
+            try {
+              const data = await this.parkApi("/nearby", { params: { lng: c.longitude, lat: c.latitude, radius: 30000 } });
+              this.reviewParkOptions = data.parks || [];
+            } catch (e) {
+              this.pushToast(e.message || "公园列表加载失败", "err");
+            }
+          },
+
+          async submitReview() {
+            if (!this.ensureLogin()) return;
+            const f = this.reviewForm;
+            if (!f.parkId) { this.pushToast("请选择公园", "warn"); return; }
+            if (!f.score) { this.pushToast("请选择体验评分", "warn"); return; }
+            this.submitting = true;
+            try {
+              await this.parkApi("/reviews", {
+                method: "POST",
+                body: { parkId: f.parkId, score: f.score, experience: f.experience, repair: f.repair, suggestion: f.suggestion },
+              });
+              this.reviewForm = { parkId: 0, score: 0, experience: "", repair: "", suggestion: "" };
+              await this.loadParkReviews();
+              this.pushToast("评价提交成功", "ok");
+            } catch (e) {
+              this.pushToast(e.message || "评价提交失败", "err");
+            } finally {
+              this.submitting = false;
+            }
+          },
+
+          /* —— ⑤ 选址分析（空间过滤 + 缓冲区分析 + 统计） —— */
+          async runParkAnalysis() {
+            if (!this.mapView) { this.pushToast("请先加载地图", "warn"); return; }
+            const f = this.analysisForm;
+            // 关键：仅将勾选启用的条件传入后台，未勾选一律不发送、不参与空间过滤
+            const params = {};
+            if (f.mode.enabled) params.mode = f.mode.value;
+            // 出行用时：小时 → 分钟（前端换算）
+            if (f.time.enabled) params.timeThreshold = f.time.unit === "hour" ? Math.round((Number(f.time.value) || 0) * 60) : f.time.value;
+            // 面积：范围（min~max）或 定值（目标面积 ± 容差%）
+            if (f.area.enabled) {
+              if (f.area.mode === "fixed") {
+                const v = Number(f.area.value) || 0;
+                const tol = Number(f.area.tol) || 0;
+                params.minArea = Math.max(0, Math.round(v * (1 - tol / 100)));
+                params.maxArea = Math.round(v * (1 + tol / 100));
+              } else {
+                params.minArea = f.area.min;
+                params.maxArea = f.area.max;
+              }
+            }
+            // 缓冲距离：千米 → 米（前端换算），勾选即执行对应缓冲区分析
+            if (f.building.enabled) params.buildingBuffer = f.building.unit === "km" ? Math.round((Number(f.building.value) || 0) * 1000) : f.building.value;
+            if (f.road.enabled) params.roadBuffer = f.road.unit === "km" ? Math.round((Number(f.road.value) || 0) * 1000) : f.road.value;
+            const c = this.mapView.center;
+            params.lng = c.longitude;
+            params.lat = c.latitude;
+
+            this.analyzing = true;
+            try {
+              this.analysisDrawn = false;
+              const data = await this.parkApi("/analysis", { params });
+              this.analysisResult = data;
+              await this.drawAnalysisResult();
+              this.pushToast("选址分析完成：count_init=" + data.stats.count_init + "，count_reachable=" + data.stats.count_reachable, "ok");
+            } catch (e) {
+              this.pushToast(e.message || "选址分析失败", "err");
+            } finally {
+              this.analyzing = false;
+            }
+          },
+
+          makeParcelRing(lng, lat, areaM2) {
+            const side = Math.sqrt(Math.max(areaM2 || 1000, 100));
+            const dLng = side / 2 / 111320;
+            const dLat = side / 2 / (111320 * Math.cos((lat || 34) * Math.PI / 180));
+            return [
+              [lng - dLng, lat - dLat],
+              [lng + dLng, lat - dLat],
+              [lng + dLng, lat + dLat],
+              [lng - dLng, lat + dLat],
+              [lng - dLng, lat - dLat],
+            ];
+          },
+
+          parcelRings(p) {
+            if (p && p.geometry && p.geometry.type === "Polygon" && Array.isArray(p.geometry.coordinates)) {
+              return p.geometry.coordinates;
+            }
+            if (p && p.geometry && p.geometry.type === "MultiPolygon" && Array.isArray(p.geometry.coordinates) && p.geometry.coordinates.length) {
+              return p.geometry.coordinates[0];
+            }
+            if (p && Array.isArray(p.rings)) return p.rings;
+            return [this.makeParcelRing(p.lng, p.lat, p.area)];
+          },
+
+          async drawAnalysisResult() {
+            const r = this.analysisResult;
+            if (!r || !window.MapService || !window.MapService.drawGraphics) {
+              this.analysisDrawn = false;
+              return;
+            }
+            const initial = r.initial || [];
+            const reachable = r.parcels || [];
+            const graphics = [];
+            initial.forEach((p) => {
+              const isReach = p.stage === "reachable";
+              const isParkBlind = p.stage === "excluded_park";
+              graphics.push({
+                type: "polygon",
+                geometry: { rings: this.parcelRings(p) },
+                symbol: {
+                  fillColor: isReach ? "rgba(24,160,88,.35)" : (isParkBlind ? "rgba(240,160,32,.30)" : "rgba(148,163,184,.28)"),
+                  outlineColor: isReach ? "#18a058" : (isParkBlind ? "#f0a020" : "#94a3b8"),
+                  outlineWidth: isReach ? 2 : (isParkBlind ? 1.6 : 1.2),
+                },
+                attributes: { name: p.name, area: p.area, stage: p.stage },
+              });
+            });
+            // 最终可达结果再叠加绿色高亮
+            reachable.forEach((p) => {
+              graphics.push({
+                type: "polygon",
+                geometry: { rings: this.parcelRings(p) },
+                symbol: { fillColor: "rgba(34,185,125,.48)", outlineColor: "#21a674", outlineWidth: 2.6 },
+                attributes: { name: p.name, area: p.area, stage: "reachable" },
+              });
+            });
+            const res = await window.MapService.drawGraphics({ name: "park-analysis", graphics });
+            this.analysisDrawn = res && res.ok;
+            if (window.MapService.zoomToGraphics) window.MapService.zoomToGraphics("park-analysis");
+          },
+
+/* ==================== 账号认证 / 数据归属权限 ==================== */
+/* ==================== 统一请求封装 / API 基址探测 ==================== */
+          /** 统一请求：拼接 API 基址 + 网络异常友好提示（修复 Failed to fetch） */
+          async _req(url, opts) {
+            let res;
+            try {
+              res = await fetch(url, opts);
+            } catch (e) {
+              // 后端未就绪：给出简短可操作提示，界面提供「重试连接」按钮
+              throw new Error("后端连接失败，请点击「重试连接」或确认已启动后端（node bff/src/index.js）");
+            }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error((data.error && data.error.message) || ("HTTP " + res.status));
+            return data;
+          },
+
+          /** 解析后端 API 基址：BFF 同源(/api)优先，否则直接使用 localhost:3000（登录/注册直接连后端） */
+          async resolveApiBase() {
+            const candidates = [];
+            if (window.location && window.location.protocol !== "file:") candidates.push("/api");
+            candidates.push("http://localhost:3000/api");
+            candidates.push("http://127.0.0.1:3000/api");
+            for (const base of candidates) {
+              try {
+                const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+                const timer = ctrl ? setTimeout(() => ctrl.abort(), 2000) : null;
+                const res = await fetch(base + "/health", ctrl ? { signal: ctrl.signal } : {});
+                if (timer) clearTimeout(timer);
+                if (res.ok) { this.apiBase = base; return base; }
+              } catch (e) { /* 尝试下一个 */ }
+            }
+            // 兜底：直接指向本地后端，登录/注册请求会走到 localhost:3000
+            this.apiBase = "http://localhost:3000/api";
+            return this.apiBase;
+          },
+
+          /** 重试连接后端（登录页「重试连接」按钮） */
+          async retryBackend() {
+            this.backendStatus = "connecting";
+            this.apiReady = false;
+            this._apiReadyPromise = null;
+            await this.ensureApiReady();
+            this.pushToast(this.backendStatus === "ok" ? "后端连接成功" : "仍无法连接后端，请确认已启动 node bff/src/index.js", this.backendStatus === "ok" ? "ok" : "warn");
+          },
+
+          /** 确保 API 基址已探测完成（避免登录/注册点击过快时的竞态失败） */
+          async ensureApiReady() {
+            if (this.apiReady) return this.apiBase;
+            if (!this._apiReadyPromise) {
+              this._apiReadyPromise = this.resolveApiBase()
+                .then((base) => { this.apiReady = true; this.backendStatus = "ok"; return base; })
+                .catch(() => { this.apiReady = true; this.backendStatus = "fail"; return this.apiBase; });
+            }
+            return this._apiReadyPromise;
+          },
+
+          async authApi(path, body = {}) {
+            await this.ensureApiReady();
+            const headers = { "Content-Type": "application/json" };
+            if (this.authToken) headers["Authorization"] = "Bearer " + this.authToken;
+            return this._req(this.apiBase + "/auth" + path, { method: "POST", headers, body: JSON.stringify(body) });
+          },
+
+          roleText(role) {
+            return { resident: "居民", operator: "业务员", admin: "管理员" }[role] || role || "";
+          },
+
+          openAuth(mode) {
+            this.auth.mode = mode || "login";
+            this.auth.show = true;
+            this.auth.error = "";
+            this.auth.confirmPassword = "";
+          },
+
+          /** 游客登录：免账号进入地图服务（浏览只读，提交数据需登录） */
+          guestLogin() {
+            this.guestMode = true;
+            this.auth.show = false;
+            this.pushToast("已以游客身份进入，登录后可提交数据", "ok");
+          },
+
+          async doLogin() {
+            if (!this.auth.username.trim() || !this.auth.password) { this.auth.error = "请输入账户和密码"; return; }
+            this.auth.loading = true; this.auth.error = "";
+            try {
+              const data = await this.authApi("/login", { username: this.auth.username, password: this.auth.password });
+              this.authToken = data.token;
+              this.currentUser = data.user;
+              localStorage.setItem("sc_token", data.token);
+              try { localStorage.setItem("sc_user", JSON.stringify(data.user)); } catch (e) {}
+              this.auth.show = false;
+              this.auth.password = "";
+              this.pushToast("登录成功，欢迎 " + (data.user.nickname || data.user.username), "ok");
+              this.afterAuthChanged();
+            } catch (e) {
+              this.auth.error = e.message || "登录失败";
+            } finally {
+              this.auth.loading = false;
+            }
+          },
+
+          async doRegister() {
+            if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{3,20}$/.test(this.auth.username.trim())) { this.auth.error = "账户需为 3-20 位字母/数字/下划线/中文"; return; }
+            if (this.auth.password.length < 6) { this.auth.error = "密码至少 6 位"; return; }
+            if (this.auth.password !== this.auth.confirmPassword) { this.auth.error = "两次输入的密码不一致"; return; }
+            this.auth.loading = true; this.auth.error = "";
+            try {
+              await this.authApi("/register", { username: this.auth.username, password: this.auth.password });
+              this.pushToast("注册成功，请登录", "ok");
+              this.auth.mode = "login";
+              this.auth.password = "";
+              this.auth.confirmPassword = "";
+            } catch (e) { this.auth.error = e.message || "注册失败"; }
+            finally { this.auth.loading = false; }
+          },
+
+          /** 忘记密码：直接重置（账户 + 新密码） */
+          async doForgot() {
+            if (!this.auth.username.trim()) { this.auth.error = "请输入账户"; return; }
+            if (this.auth.newPassword.length < 6) { this.auth.error = "新密码至少 6 位"; return; }
+            if (this.auth.newPassword !== this.auth.confirmPassword) { this.auth.error = "两次输入的新密码不一致"; return; }
+            this.auth.loading = true; this.auth.error = "";
+            try {
+              const data = await this.authApi("/forgot", { username: this.auth.username, newPassword: this.auth.newPassword });
+              this.pushToast(data.message || "密码已重置", "ok");
+              this.auth.mode = "login";
+              this.auth.password = this.auth.newPassword;
+              this.auth.newPassword = "";
+              this.auth.confirmPassword = "";
+            } catch (e) { this.auth.error = e.message || "重置失败"; }
+            finally { this.auth.loading = false; }
+          },
+
+          async doChangePassword() {
+            if (!this.auth.password || this.auth.newPassword.length < 6) { this.auth.error = "请输入原密码，新密码至少 6 位"; return; }
+            this.auth.loading = true; this.auth.error = "";
+            try {
+              const data = await this.authApi("/change-password", { oldPassword: this.auth.password, newPassword: this.auth.newPassword });
+              this.auth.show = false;
+              this.auth.password = "";
+              this.auth.newPassword = "";
+              this.pushToast(data.message || "密码修改成功", "ok");
+            } catch (e) { this.auth.error = e.message || "修改失败"; }
+            finally { this.auth.loading = false; }
+          },
+
+          logout() {
+            this.authToken = "";
+            this.currentUser = null;
+            this.guestMode = false;
+            localStorage.removeItem("sc_token");
+            try { localStorage.removeItem("sc_user"); } catch (e) {}
+            this.auth.show = true;   // 退出后回到全屏登录页
+            this.auth.mode = "login";
+            this.pushToast("已退出登录，请重新登录", "warn");
+            this.afterAuthChanged();
+          },
+
+          /** 登录/退出后刷新依赖用户的数据 */
+          afterAuthChanged() {
+            if (this.activeModule === "park") {
+              this.loadParkDemands();
+              this.loadParkParcels();
+              this.loadParkReviews();
+            }
+          },
+
+          /** 需要登录才能进行的操作：未登录先弹出登录框 */
+          ensureLogin() {
+            if (this.isLoggedIn) return true;
+            this.openAuth("login");
+            this.pushToast("请先登录后再操作", "warn");
+            return false;
+          },
+
+          /** 数据归属：本人或管理员/业务员可改删 */
+          canEdit(ownerId) {
+            if (!this.isLoggedIn) return false;
+            const role = this.currentUser && this.currentUser.role;
+            if (role === "admin" || role === "operator") return true;
+            return ownerId != null && String(ownerId) === String(this.currentUser.id);
+          },
+
+          /* —— 需求编辑/删除 —— */
+          startEditDemand(d) {
+            this.editingDemandId = d.id;
+            this.editDemandForm = { title: d.title || "", description: d.description || "" };
+          },
+          cancelEditDemand() { this.editingDemandId = null; },
+          async saveDemand(d) {
+            try {
+              const data = await this.parkApi("/demands/" + d.id, { method: "PUT", body: this.editDemandForm });
+              Object.assign(d, data.demand);
+              this.editingDemandId = null;
+              this.pushToast("需求已更新", "ok");
+            } catch (e) { this.pushToast(e.message || "更新失败", "err"); }
+          },
+          async deleteDemand(d) {
+            if (!window.confirm("确认删除该需求？")) return;
+            try {
+              await this.parkApi("/demands/" + d.id, { method: "DELETE", body: {} });
+              this.parkDemands = this.parkDemands.filter((x) => x.id !== d.id);
+              this.pushToast("需求已删除", "ok");
+            } catch (e) { this.pushToast(e.message || "删除失败", "err"); }
+          },
+
+          /* —— 评价编辑/删除 —— */
+          startEditReview(rv) {
+            this.editingReviewId = rv.id;
+            this.editReviewForm = { score: rv.score, experience: rv.experience || "", repair: rv.repair_desc || "", suggestion: rv.suggestion || "" };
+          },
+          cancelEditReview() { this.editingReviewId = null; },
+          async saveReview(rv) {
+            try {
+              const data = await this.parkApi("/reviews/" + rv.id, { method: "PUT", body: this.editReviewForm });
+              Object.assign(rv, data.review);
+              this.editingReviewId = null;
+              this.pushToast("评价已更新", "ok");
+            } catch (e) { this.pushToast(e.message || "更新失败", "err"); }
+          },
+          async deleteReview(rv) {
+            if (!window.confirm("确认删除该评价？")) return;
+            try {
+              await this.parkApi("/reviews/" + rv.id, { method: "DELETE", body: {} });
+              this.parkReviews = this.parkReviews.filter((x) => x.id !== rv.id);
+              this.pushToast("评价已删除", "ok");
+            } catch (e) { this.pushToast(e.message || "删除失败", "err"); }
+          },
+
+          /* —— 评论删除 / 投票取消 —— */
+          async deleteComment(pl, cm) {
+            if (!window.confirm("确认删除该评论？")) return;
+            try {
+              await this.parkApi("/parcels/" + pl.id + "/comments/" + cm.id, { method: "DELETE", body: {} });
+              await this.loadParcelComments(pl);
+              this.pushToast("评论已删除", "ok");
+            } catch (e) { this.pushToast(e.message || "删除失败", "err"); }
+          },
+          async retractVote(pl) {
+            try {
+              await this.parkApi("/parcels/" + pl.id + "/vote", { method: "DELETE", body: {} });
+              this.voteScores = Object.assign({}, this.voteScores, { [pl.id]: 0 });
+              await this.loadParkParcels();
+              this.pushToast("已取消投票", "ok");
+            } catch (e) { this.pushToast(e.message || "取消失败", "err"); }
+          },
+        },
+      });
+
+      app.mount("#app");
+    })();
+  </script>
+</body>
+</html>
+
+
+
